@@ -7,3 +7,7 @@ import os
 import tempfile
 
 os.environ["STUDYBYSARA_DB"] = os.path.join(tempfile.mkdtemp(), "test.db")
+
+import logging
+
+logging.disable(logging.CRITICAL)   # expected warnings from failure-path tests would clutter the output

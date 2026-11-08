@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% from "_macros.html" import today_progress %}
 {% block title %}Practice Problems · TutorConnect{% endblock %}
+
+{% macro topic_buttons(topics) -%}
+  <div class="topic-buttons">
+    {% for t in topics %}
+      <button type="submit" name="topic" value="{{ t.key }}" class="topic-btn" {{ 'disabled' if ai_left == 0 }}>{{ t.name }}</button>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
 {% block content %}
 <h1>Practice Problems</h1>
 
@@ -16,6 +25,20 @@
     <div class="stat"><span class="stat-value">{{ status.current_streak }}</span><span class="stat-label">day streak</span></div>
     <div class="stat"><span class="stat-value">{{ status.best_streak }}</span><span class="stat-label">best streak</span></div>
   </div>
+
+  {% if in_progress_ai %}
+    <section class="panel wide-panel continue-panel">
+      <h2>Pick up where you left off</h2>
+      <ul class="continue-list">
+        {% for s in in_progress_ai %}
+          <li>
+            <span>{{ '📷' if s.source == 'photo' else '📚' }} {{ s.topic }} <small>({{ s.answered }}/{{ s.total }} done)</small></span>
+            <a class="button-link" href="{{ url_for('practice_set', set_id=s.id) }}">Continue →</a>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
 
   <div class="practice-modes">
     <section class="mode-card mode-primary">
@@ -36,18 +59,42 @@
     </section>
 
     <section class="mode-card mode-soon">
-      <span class="tile-icon" aria-hidden="true">📚</span>
-      <h2>Topic practice</h2>
-      <p>Pick a topic and get fresh questions. Counts toward your streak.</p>
-      <p class="soon-tag">Coming soon</p>
-    </section>
-
-    <section class="mode-card mode-soon">
       <span class="tile-icon" aria-hidden="true">📷</span>
       <h2>Photo practice</h2>
       <p>Snap a problem from your homework and practice similar ones. Counts toward your streak.</p>
       <p class="soon-tag">Coming soon</p>
     </section>
   </div>
+
+  <section class="panel wide-panel topic-practice" id="topic-practice">
+    <div class="topic-practice-head">
+      <h2>📚 Topic practice</h2>
+      <span class="ai-left {{ 'none-left' if ai_left == 0 }}">{{ ai_left }} of {{ ai_limit }} AI sets left today</span>
+    </div>
+    <p class="hint">Pick a topic and get 5 fresh questions. Counts toward your streak and stats, not leaderboard points.</p>
+    {% if ai_left == 0 %}
+      <p class="empty">You've used today's AI sets. They reset at midnight (Pacific). Fundamentals is unlimited!</p>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('start_topic') }}" class="topic-form" data-ai-form>
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+      <h3>Math for {{ current_user.grade_level or 'your level' }}</h3>
+      {{ topic_buttons(fits) }}
+
+      {% if others %}
+        <details class="more-topics">
+          <summary>Show all math topics</summary>
+          {{ topic_buttons(others) }}
+        </details>
+      {% endif %}
+
+      <h3>SAT / ACT Math</h3>
+      {{ topic_buttons(test_prep) }}
+
+      <p class="generating" role="status" hidden>⏳ Making your questions… this can take up to 30 seconds.</p>
+    </form>
+  </section>
 {% endif %}
 {% endblock %}
+

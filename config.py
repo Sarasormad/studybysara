@@ -20,3 +20,11 @@ LEADERBOARD_SIZE = 50
 WEAK_TOPIC_MIN_ATTEMPTS = 3           # a topic needs this many answers before it can be called "weak"
 WEAK_TOPICS_SHOWN = 2                 # how many weakest topics to highlight
 RECENT_ATTEMPTS_SHOWN = 10
+
+# AI practice (topic + photo). The API key is read by the Anthropic SDK from ANTHROPIC_API_KEY;
+# it never goes to the browser.
+import os as _os
+AI_MODEL = _os.environ.get("STUDYBYSARA_AI_MODEL", "claude-opus-5-5")
+AI_EFFORT = _os.environ.get("STUDYBYSARA_AI_EFFORT", "medium")   # low | medium | high
+AI_DAILY_LIMIT = 20                   # topic + photo generations per student per day
+AI_SET_SIZE = 5                       # questions per AI set

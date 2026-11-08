@@ -443,3 +443,35 @@ button.small, .small-link { margin: 8px 0 0; padding: 6px 14px; font-size: 0.85r
 .page .full-panel { max-width: none; }
 .nowrap { white-space: nowrap; }
 form.practice-this { align-items: flex-start; }
+
+/* ======================= AI topic practice ======================= */
+.continue-panel { padding: 12px 16px; }
+.continue-panel h2 { margin-bottom: 4px; }
+.continue-list { list-style: none; margin: 0; padding: 0; }
+.continue-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); }
+.continue-list li:first-child { border-top: none; }
+.continue-list small { color: var(--muted); }
+.continue-list .button-link { padding: 4px 0; }
+.topic-practice { margin-top: 16px; }
+.topic-practice-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.topic-practice h3 { font-size: 0.9rem; color: var(--muted); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+.ai-left { font-size: 0.85rem; font-weight: 600; color: var(--accent); background: #eef0ff; padding: 3px 10px; border-radius: 999px; }
+.ai-left.none-left { color: var(--wrong); background: var(--wrong-bg); }
+.topic-form { gap: 0; }
+.topic-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+button.topic-btn { margin: 0; padding: 8px 14px; font-size: 0.9rem; background: var(--card); color: var(--text); border: 1px solid var(--border); font-weight: 600; }
+button.topic-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: #eef0ff; }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+button.is-loading { opacity: 1 !important; border-color: var(--accent); background: #eef0ff; color: var(--accent); }
+.more-topics { margin-top: 10px; }
+.more-topics summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; }
+.generating { margin: 14px 0 0; font-weight: 600; color: var(--accent); }
+.ai-tag { font-size: 0.75rem; font-weight: 700; color: #6d28d9; background: #ede9fe; padding: 1px 8px; border-radius: 999px; }
+
+/* Report a problem */
+.report-box { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 10px; }
+.report-box summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.report-box form { margin-top: 10px; gap: 10px; }
+.report-reasons { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.report-box button.small { align-self: flex-start; margin: 0; }
+.reported { margin-top: 14px !important; }

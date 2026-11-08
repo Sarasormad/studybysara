@@ -24,8 +24,14 @@
                 <input type="hidden" name="topic" value="{{ t.topic }}">
                 <button type="submit" class="small">Practice this →</button>
               </form>
+            {% elif ai_topic_key(t.topic) %}
+              <form method="post" action="{{ url_for('start_topic') }}" class="practice-this" data-ai-form>
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button type="submit" name="topic" value="{{ ai_topic_key(t.topic) }}" class="small">Practice this →</button>
+                <p class="generating hint" role="status" hidden>⏳ Making your questions…</p>
+              </form>
             {% else %}
-              <a class="button-link primary small-link" href="{{ url_for('practice') }}">Practice this →</a>
+              <a class="button-link primary small-link" href="{{ url_for('practice') }}#topic-practice">Practice this →</a>
             {% endif %}
           {% endif %}
         </li>

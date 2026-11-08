@@ -9,7 +9,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import streaks
-from config import (DAILY_GOAL_SECONDS, FUNDAMENTALS_POINTS, LEADERBOARD_SIZE,
+from config import (AI_DAILY_LIMIT, DAILY_GOAL_SECONDS, FUNDAMENTALS_POINTS, LEADERBOARD_SIZE,
                     RECENT_ATTEMPTS_SHOWN, STREAK_BONUS_CAP, WEAK_TOPIC_MIN_ATTEMPTS,
                     WEAK_TOPICS_SHOWN)
 from grading import answers_match
@@ -78,6 +78,29 @@ CREATE INDEX IF NOT EXISTS idx_ledger_time ON points_ledger(created_at);
 -- At most one streak bonus per student per day, enforced by the database.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_streak_once
     ON points_ledger(user_id, practice_day) WHERE reason = 'streak';
+
+-- Each successful AI question set (topic or photo), for the daily limit.
+CREATE TABLE IF NOT EXISTS ai_generations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    kind         TEXT NOT NULL CHECK (kind IN ('topic', 'photo')),
+    topic        TEXT,
+    set_id       INTEGER REFERENCES problem_sets(id),
+    practice_day TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_generations_day ON ai_generations(user_id, practice_day);
+
+-- "Report a problem" on AI questions, since an AI answer key can be wrong.
+CREATE TABLE IF NOT EXISTS problem_reports (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    problem_id INTEGER NOT NULL REFERENCES problems(id),
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    reason     TEXT NOT NULL CHECK (reason IN ('wrong_answer', 'confusing', 'other')),
+    note       TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_once ON problem_reports(user_id, problem_id);
 """
 
 
@@ -345,3 +368,44 @@ def student_summary(db, user_id, now):
         "accuracy": round(100 * correct / answered) if answered else None,
         "weakest_topic": weakest["topic"] if weakest else None,
     }
+
+
+# ---------- AI limits and reports ----------
+REPORT_REASONS = {
+    "wrong_answer": "The answer key is wrong",
+    "confusing": "The question is confusing or broken",
+    "other": "Something else",
+}
+
+
+def ai_generations_left(db, user_id, now):
+    used = db.execute("SELECT COUNT(*) FROM ai_generations WHERE user_id = ? AND practice_day = ?",
+                      (user_id, streaks.practice_day(now).isoformat())).fetchone()[0]
+    return max(0, AI_DAILY_LIMIT - used)
+
+
+def record_ai_generation(db, user_id, kind, topic, set_id, now):
+    db.execute("INSERT INTO ai_generations (user_id, kind, topic, set_id, practice_day, created_at) "
+               "VALUES (?, ?, ?, ?, ?, ?)",
+               (user_id, kind, topic, set_id, streaks.practice_day(now).isoformat(), to_db(now)))
+    db.commit()
+
+
+def report_problem(db, user_id, problem_id, reason, note, now):
+    """Save a report on one of the student's own AI questions. Returns False if not allowed."""
+    problem = db.execute("SELECT source FROM problems WHERE id = ? AND created_for = ?",
+                         (problem_id, user_id)).fetchone()
+    if problem is None or problem["source"] == "fundamentals" or reason not in REPORT_REASONS:
+        return False
+    db.execute("INSERT OR IGNORE INTO problem_reports (problem_id, user_id, reason, note, created_at) "
+               "VALUES (?, ?, ?, ?, ?)", (problem_id, user_id, reason, (note or "").strip()[:500] or None, to_db(now)))
+    db.commit()
+    return True
+
+
+def reported_ids(db, user_id, problem_ids):
+    if not problem_ids:
+        return set()
+    marks = ",".join("?" * len(problem_ids))
+    return {r[0] for r in db.execute(f"SELECT problem_id FROM problem_reports WHERE user_id = ? "
+                                     f"AND problem_id IN ({marks})", (user_id, *problem_ids))}

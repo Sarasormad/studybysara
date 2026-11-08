@@ -13,10 +13,11 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import ai_practice as ai
 import practice as pr          # (the route function below is also called practice)
 import streaks
 from fundamentals import TOPICS, make_round, topic_key
-from config import FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
+from config import AI_DAILY_LIMIT, FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # STUDYBYSARA_DB lets tests and scripts point the app at a different database file.
@@ -237,6 +238,7 @@ def local_time(moment, fmt="%b %-d, %-I:%M %p"):
 
 # Lets templates ask "is this a Fundamentals topic?" for the "Practice this" button.
 app.jinja_env.globals["fundamentals_topic"] = topic_key
+app.jinja_env.globals["ai_topic_key"] = lambda name: ai.TOPIC_KEY_BY_NAME.get(name)
 SOURCE_LABELS = {"fundamentals": "Fundamentals", "topic": "Topic practice", "photo": "Photo practice"}
 app.jinja_env.globals["source_labels"] = SOURCE_LABELS
 app.jinja_env.globals["weak_min"] = WEAK_TOPIC_MIN_ATTEMPTS
@@ -468,14 +470,65 @@ def practice():
     user = current_user()
     if user["role"] != "student":
         return render_template("practice.html", status=None, unfinished=None)
-    db = get_db()
+    db, now = get_db(), pr.utcnow()
     unfinished = pr.unfinished_set(db, user["id"], "fundamentals")
     answered = 0
     if unfinished:
         answered = db.execute("SELECT COUNT(*) FROM attempts a JOIN problems p ON p.id = a.problem_id "
                               "WHERE p.set_id = ?", (unfinished["id"],)).fetchone()[0]
-    return render_template("practice.html", status=pr.practice_status(db, user["id"], pr.utcnow()),
-                           unfinished=unfinished, answered=answered, round_size=FUNDAMENTALS_ROUND_SIZE)
+    in_progress_ai = db.execute(
+        """SELECT s.id, s.topic, s.source, COUNT(p.id) AS total, COUNT(a.id) AS answered
+           FROM problem_sets s JOIN problems p ON p.set_id = s.id
+           LEFT JOIN attempts a ON a.problem_id = p.id
+           WHERE s.user_id = ? AND s.source != 'fundamentals' AND s.completed_at IS NULL
+           GROUP BY s.id ORDER BY s.id DESC LIMIT 3""", (user["id"],)).fetchall()
+    fits, others, test_prep = ai.topics_for(user["grade_level"])
+    return render_template("practice.html", status=pr.practice_status(db, user["id"], now),
+                           unfinished=unfinished, answered=answered, round_size=FUNDAMENTALS_ROUND_SIZE,
+                           fits=fits, others=others, test_prep=test_prep, in_progress_ai=in_progress_ai,
+                           ai_left=pr.ai_generations_left(db, user["id"], now), ai_limit=AI_DAILY_LIMIT)
+
+
+@app.route("/practice/topic/start", methods=["POST"])
+@student_required
+def start_topic():
+    """Generate 5 AI questions on a catalog topic (counts toward the daily AI limit)."""
+    user, db, now = current_user(), get_db(), pr.utcnow()
+    topic = ai.TOPICS_BY_KEY.get(request.form.get("topic", ""))
+    if topic is None:
+        flash("Pick a topic from the list.", "error")
+        return redirect(url_for("practice"))
+    if pr.ai_generations_left(db, user["id"], now) <= 0:
+        flash(f"You've used all {AI_DAILY_LIMIT} AI question sets for today. Fundamentals is unlimited!", "error")
+        return redirect(url_for("practice"))
+    try:
+        problems = ai.generate_topic_questions(topic["key"], user["grade_level"])
+    except ai.AIError as e:
+        flash(str(e), "error")
+        return redirect(url_for("practice"))
+    set_id = pr.create_set(db, user["id"], "topic", problems, pr.utcnow(),
+                           topic=topic["name"], grade_level=user["grade_level"])
+    pr.record_ai_generation(db, user["id"], "topic", topic["name"], set_id, now)
+    return redirect(url_for("practice_set", set_id=set_id))
+
+
+@app.route("/practice/problem/<int:problem_id>/report", methods=["POST"])
+@student_required
+def report_problem(problem_id):
+    user, db = current_user(), get_db()
+    problem = db.execute("SELECT set_id FROM problems WHERE id = ? AND created_for = ?",
+                         (problem_id, user["id"])).fetchone()
+    if problem is None:
+        abort(404)
+    if pr.report_problem(db, user["id"], problem_id, request.form.get("reason"),
+                         request.form.get("note"), pr.utcnow()):
+        flash("Thanks for reporting it. We'll take a look.", "success")
+    else:
+        flash("That question can't be reported.", "error")
+    back = request.form.get("back")
+    if back == "feedback":
+        return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
+    return redirect(url_for("practice_set", set_id=problem["set_id"]))
 
 
 @app.route("/practice/fundamentals/start", methods=["POST"])
@@ -503,8 +556,11 @@ def practice_set(set_id):
     rows = pr.set_problems(db, user["id"], set_id)
     if not rows:
         abort(404)
+    pset = db.execute("SELECT * FROM problem_sets WHERE id = ?", (set_id,)).fetchone()
     status = pr.practice_status(db, user["id"], pr.utcnow())
     total = len(rows)
+    reported = pr.reported_ids(db, user["id"], [r["id"] for r in rows])
+    page = {"pset": pset, "reported": reported, "report_reasons": pr.REPORT_REASONS}
 
     answered_id = request.args.get("answered", type=int)
     if answered_id:
@@ -514,19 +570,19 @@ def practice_set(set_id):
         has_next = any(r["is_correct"] is None for r in rows)
         return render_template("practice_question.html", mode="feedback", set_id=set_id, total=total,
                                problem=done, choices=json.loads(done["choices"]) if done["choices"] else None,
-                               has_next=has_next, status=status)
+                               has_next=has_next, status=status, **page)
 
     current = next((r for r in rows if r["is_correct"] is None), None)
     if current is None:
         correct = sum(r["is_correct"] for r in rows)
         points = sum(r["points_awarded"] for r in rows)
         return render_template("practice_question.html", mode="summary", set_id=set_id, total=total,
-                               rows=rows, correct=correct, points=points, status=status)
+                               rows=rows, correct=correct, points=points, status=status, **page)
 
     pr.mark_served(db, current["id"], pr.utcnow())
     # public_view() strips the answer key: the browser never sees it before submitting.
     return render_template("practice_question.html", mode="question", set_id=set_id, total=total,
-                           problem=pr.public_view(current), status=status)
+                           problem=pr.public_view(current), status=status, **page)
 
 
 @app.route("/practice/problem/<int:problem_id>/answer", methods=["POST"])

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_macros.html" import today_progress %}
+{% block title %}Fundamentals · TutorConnect{% endblock %}
+{% block content %}
+<div class="practice-top">
+  <a class="back-link" href="{{ url_for('practice') }}">← Practice</a>
+  {{ today_progress(status, compact=true) }}
+</div>
+
+{% if mode == 'question' %}
+  {# `problem` here is public_view(): it has no answer key or explanation. #}
+  <section class="panel question-panel">
+    <p class="q-meta">Question {{ problem.position }} of {{ total }} · {{ problem.topic }}</p>
+    <h2 class="q-text">{{ problem.question_text }}</h2>
+
+    <form method="post" action="{{ url_for('answer_problem', problem_id=problem.id) }}" class="answer-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% if problem.answer_type == 'multiple_choice' %}
+        <fieldset class="choices">
+          <legend class="visually-hidden">Choose an answer</legend>
+          {% for c in problem.choices %}
+            <label class="choice">
+              <input type="radio" name="answer" value="{{ c }}" required>
+              <span>{{ c }}</span>
+            </label>
+          {% endfor %}
+        </fieldset>
+      {% else %}
+        <label>Your answer
+          <input type="text" name="answer" required maxlength="100" autocomplete="off"
+                 inputmode="text" spellcheck="false" autofocus>
+        </label>
+        {% if problem.hint %}<p class="hint">{{ problem.hint }}</p>{% endif %}
+      {% endif %}
+      <button type="submit">Check answer</button>
+    </form>
+  </section>
+
+{% elif mode == 'feedback' %}
+  <section class="panel question-panel feedback {{ 'is-right' if problem.is_correct else 'is-wrong' }}">
+    <p class="q-meta">Question {{ problem.position }} of {{ total }} · {{ problem.topic }}</p>
+    <h2 class="q-text">{{ problem.question_text }}</h2>
+
+    {% if choices %}
+      <ul class="choices choices-review">
+        {% for c in choices %}
+          <li class="choice
+              {{- ' choice-correct' if c == problem.correct_answer }}
+              {{- ' choice-picked' if c == problem.submitted_answer }}">
+            <span>{{ c }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <div class="verdict" role="status">
+      {% if problem.is_correct %}
+        <strong>✅ Correct!</strong>
+        {% if problem.points_awarded %}<span class="points-pill">+{{ problem.points_awarded }} points</span>{% endif %}
+      {% else %}
+        <strong>❌ Not quite.</strong>
+        <span>You answered <b>{{ problem.submitted_answer }}</b>. The answer is <b>{{ problem.correct_answer }}</b>.</span>
+      {% endif %}
+    </div>
+    {% if problem.explanation %}<p class="explanation">{{ problem.explanation }}</p>{% endif %}
+
+    <a class="button-link primary" href="{{ url_for('practice_set', set_id=set_id) }}" autofocus>
+      {{ 'Next question →' if has_next else 'See results →' }}</a>
+  </section>
+
+{% else %}
+  <section class="panel question-panel summary">
+    <h2>Round complete! 🎉</h2>
+    <p class="score"><strong>{{ correct }}</strong> of {{ total }} correct · <strong>+{{ points }}</strong> points</p>
+    <ol class="review-list">
+      {% for r in rows %}
+        <li class="{{ 'is-right' if r.is_correct else 'is-wrong' }}">
+          <span class="mark" aria-label="{{ 'correct' if r.is_correct else 'wrong' }}">{{ '✓' if r.is_correct else '✗' }}</span>
+          <span class="review-q">{{ r.question_text }}</span>
+          <span class="review-a">{{ r.correct_answer }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+    <div class="form-actions">
+      <form method="post" action="{{ url_for('start_fundamentals') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button type="submit">Another round</button>
+      </form>
+      <a class="button-link" href="{{ url_for('leaderboard') }}">Leaderboard</a>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

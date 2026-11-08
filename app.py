@@ -1,8 +1,10 @@
 """Tutor App — login / signup for students and tutors (Flask + SQLite)."""
+import json
 import os
 import re
 import secrets
 import sqlite3
+from contextlib import closing
 from functools import wraps
 
 from flask import (Flask, abort, flash, g, redirect, render_template, request,
@@ -11,8 +13,14 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import practice as pr          # (the route function below is also called practice)
+import streaks
+from fundamentals import make_round
+from config import FUNDAMENTALS_ROUND_SIZE
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE = os.path.join(BASE_DIR, "tutor_app.db")
+# STUDYBYSARA_DB lets tests and scripts point the app at a different database file.
+DATABASE = os.environ.get("STUDYBYSARA_DB") or os.path.join(BASE_DIR, "tutor_app.db")
 # Uploaded files live in instance/ (git-ignored), never in static/ or the repo.
 AVATAR_DIR = os.path.join(BASE_DIR, "instance", "avatars")
 AVATAR_SIZE = 256                      # saved as a 256x256 square
@@ -64,7 +72,8 @@ def normalize_code(raw):
 
 
 def init_db():
-    with sqlite3.connect(DATABASE) as db:
+    # closing() makes sure the connection is closed; `with sqlite3.connect()` alone only commits.
+    with closing(sqlite3.connect(DATABASE)) as db, db:
         db.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -94,6 +103,8 @@ def init_db():
         db.execute("CREATE INDEX IF NOT EXISTS idx_users_tutor_id ON users(tutor_id)")
         # COLLATE NOCASE: "Sara_M" and "sara_m" count as the same username.
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username COLLATE NOCASE)")
+        # Practice tables (problem_sets, problems, attempts, points_ledger): see practice.py.
+        db.executescript(pr.SCHEMA)
         # Give a code to any tutor who signed up before codes existed.
         for (tutor_id,) in db.execute(
             "SELECT id FROM users WHERE role = 'tutor' AND tutor_code IS NULL"
@@ -208,6 +219,18 @@ def login_required(view):
         if current_user() is None:
             flash("Please log in first.", "error")
             return redirect(url_for("login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def student_required(view):
+    """Like login_required, but only for student accounts (tutors don't practice)."""
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if current_user()["role"] != "student":
+            flash("Practice is for student accounts.", "error")
+            return redirect(url_for("practice"))
         return view(*args, **kwargs)
     return wrapped
 
@@ -403,17 +426,109 @@ def avatar_file(filename):
     return send_from_directory(AVATAR_DIR, filename, max_age=60 * 60 * 24 * 365)
 
 
+# ---------- Practice ----------
 @app.route("/practice")
 @login_required
 def practice():
-    return render_template("practice.html")
+    user = current_user()
+    if user["role"] != "student":
+        return render_template("practice.html", status=None, unfinished=None)
+    db = get_db()
+    unfinished = pr.unfinished_set(db, user["id"], "fundamentals")
+    answered = 0
+    if unfinished:
+        answered = db.execute("SELECT COUNT(*) FROM attempts a JOIN problems p ON p.id = a.problem_id "
+                              "WHERE p.set_id = ?", (unfinished["id"],)).fetchone()[0]
+    return render_template("practice.html", status=pr.practice_status(db, user["id"], pr.utcnow()),
+                           unfinished=unfinished, answered=answered, round_size=FUNDAMENTALS_ROUND_SIZE)
+
+
+@app.route("/practice/fundamentals/start", methods=["POST"])
+@student_required
+def start_fundamentals():
+    user, db = current_user(), get_db()
+    existing = pr.unfinished_set(db, user["id"], "fundamentals")
+    if existing:                                    # finish the current round first
+        return redirect(url_for("practice_set", set_id=existing["id"]))
+    problems = make_round(user["grade_level"], size=FUNDAMENTALS_ROUND_SIZE)
+    set_id = pr.create_set(db, user["id"], "fundamentals", problems, pr.utcnow(),
+                           topic="Fundamentals", grade_level=user["grade_level"])
+    return redirect(url_for("practice_set", set_id=set_id))
+
+
+@app.route("/practice/set/<int:set_id>")
+@student_required
+def practice_set(set_id):
+    """Shows the next unanswered question, the feedback for one just answered
+    (?answered=<problem id>), or the round summary when everything is answered."""
+    user, db = current_user(), get_db()
+    rows = pr.set_problems(db, user["id"], set_id)
+    if not rows:
+        abort(404)
+    status = pr.practice_status(db, user["id"], pr.utcnow())
+    total = len(rows)
+
+    answered_id = request.args.get("answered", type=int)
+    if answered_id:
+        done = next((r for r in rows if r["id"] == answered_id and r["is_correct"] is not None), None)
+        if done is None:
+            return redirect(url_for("practice_set", set_id=set_id))
+        has_next = any(r["is_correct"] is None for r in rows)
+        return render_template("practice_question.html", mode="feedback", set_id=set_id, total=total,
+                               problem=done, choices=json.loads(done["choices"]) if done["choices"] else None,
+                               has_next=has_next, status=status)
+
+    current = next((r for r in rows if r["is_correct"] is None), None)
+    if current is None:
+        correct = sum(r["is_correct"] for r in rows)
+        points = sum(r["points_awarded"] for r in rows)
+        return render_template("practice_question.html", mode="summary", set_id=set_id, total=total,
+                               rows=rows, correct=correct, points=points, status=status)
+
+    pr.mark_served(db, current["id"], pr.utcnow())
+    # public_view() strips the answer key: the browser never sees it before submitting.
+    return render_template("practice_question.html", mode="question", set_id=set_id, total=total,
+                           problem=pr.public_view(current), status=status)
+
+
+@app.route("/practice/problem/<int:problem_id>/answer", methods=["POST"])
+@student_required
+def answer_problem(problem_id):
+    user, db = current_user(), get_db()
+    problem = db.execute("SELECT set_id FROM problems WHERE id = ? AND created_for = ?",
+                         (problem_id, user["id"])).fetchone()
+    if problem is None:
+        abort(404)
+    try:
+        result = pr.record_attempt(db, user["id"], problem_id, request.form.get("answer"), pr.utcnow())
+    except pr.AnswerError as e:
+        flash(str(e), "error")
+        return redirect(url_for("practice_set", set_id=problem["set_id"]))
+    if result["streak_bonus"]:
+        tomorrow = streaks.streak_points(result["streak_day"] + 1)
+        flash(f"🔥 Streak secured! +{result['streak_bonus']} points. "
+              f"Come back tomorrow for +{tomorrow}.", "success")
+    return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
+
+
+@app.route("/leaderboard")
+@login_required
+def leaderboard():
+    user, db = current_user(), get_db()
+    tab = "all" if request.args.get("tab") == "all" else "week"
+    since = streaks.week_start_utc(pr.utcnow()) if tab == "week" else None
+    is_student = user["role"] == "student"
+    rows, me = pr.leaderboard(db, since, viewer_id=user["id"] if is_student else None)
+    return render_template("leaderboard.html", tab=tab, rows=rows, me=me, is_student=is_student)
 
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    students, tutor = linked_people(current_user())
-    return render_template("dashboard.html", user=current_user(), students=students, tutor=tutor)
+    user = current_user()
+    students, tutor = linked_people(user)
+    status = pr.practice_status(get_db(), user["id"], pr.utcnow()) if user["role"] == "student" else None
+    return render_template("dashboard.html", user=user, students=students, tutor=tutor, status=status)
 
 
 @app.route("/link-tutor", methods=["POST"])

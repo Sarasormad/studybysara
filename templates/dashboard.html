@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import avatar %}
+{% from "_macros.html" import avatar, today_progress %}
 {% block title %}Dashboard · TutorConnect{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
@@ -37,6 +37,17 @@
     <p class="hint">Subjects: {{ user.subject }}</p>
   </section>
 {% else %}
+  <section class="panel">
+    <h2>Today</h2>
+    {{ today_progress(status) }}
+    <div class="stat-row">
+      <div class="stat"><span class="stat-value">{{ status.current_streak }}</span><span class="stat-label">day streak</span></div>
+      <div class="stat"><span class="stat-value">{{ status.best_streak }}</span><span class="stat-label">best streak</span></div>
+      <div class="stat"><span class="stat-value">{{ status.week_points }}</span><span class="stat-label">points this week</span></div>
+    </div>
+    <a class="button-link primary" href="{{ url_for('practice') }}">Practice now</a>
+  </section>
+
   <section class="panel">
     <h2>Your details</h2>
     <p>Grade level: <strong>{{ user.grade_level or 'Not set' }}</strong></p>

@@ -1,15 +1,53 @@
 {% extends "base.html" %}
+{% from "_macros.html" import today_progress %}
 {% block title %}Practice Problems · TutorConnect{% endblock %}
 {% block content %}
 <h1>Practice Problems</h1>
-<p class="sub">
-  {% if current_user.role == 'tutor' %}Create problems and see how your students do on them.
-  {% else %}Work through problems from your tutor and track your progress.{% endif %}
-</p>
 
-<section class="panel empty-state">
-  <span class="tile-icon" aria-hidden="true">🚧</span>
-  <h2>Coming soon</h2>
-  <p class="empty">This is where practice problems and progress tracking will live. We'll build it next.</p>
-</section>
+{% if current_user.role != 'student' %}
+  <p class="sub">Students practice here. You'll see your students' progress on your Dashboard.</p>
+{% else %}
+  <p class="sub">Practice {{ status.goal_minutes }} minutes a day to keep your streak going.</p>
+
+  {{ today_progress(status) }}
+
+  <div class="stat-row">
+    <div class="stat"><span class="stat-value">{{ status.week_points }}</span><span class="stat-label">points this week</span></div>
+    <div class="stat"><span class="stat-value">{{ status.current_streak }}</span><span class="stat-label">day streak</span></div>
+    <div class="stat"><span class="stat-value">{{ status.best_streak }}</span><span class="stat-label">best streak</span></div>
+  </div>
+
+  <div class="practice-modes">
+    <section class="mode-card mode-primary">
+      <span class="tile-icon" aria-hidden="true">🧮</span>
+      <h2>Fundamentals</h2>
+      <p>{{ round_size }} quick questions on the basics: arithmetic, fractions, decimals, percents and more,
+         matched to {{ current_user.grade_level or 'your level' }}.</p>
+      <p class="mode-points">⭐ 10 leaderboard points per correct answer</p>
+      {% if unfinished %}
+        <a class="button-link primary" href="{{ url_for('practice_set', set_id=unfinished.id) }}">
+          Continue round ({{ answered }}/{{ round_size }})</a>
+      {% else %}
+        <form method="post" action="{{ url_for('start_fundamentals') }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button type="submit">Start a round</button>
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="mode-card mode-soon">
+      <span class="tile-icon" aria-hidden="true">📚</span>
+      <h2>Topic practice</h2>
+      <p>Pick a topic and get fresh questions. Counts toward your streak.</p>
+      <p class="soon-tag">Coming soon</p>
+    </section>
+
+    <section class="mode-card mode-soon">
+      <span class="tile-icon" aria-hidden="true">📷</span>
+      <h2>Photo practice</h2>
+      <p>Snap a problem from your homework and practice similar ones. Counts toward your streak.</p>
+      <p class="soon-tag">Coming soon</p>
+    </section>
+  </div>
+{% endif %}
 {% endblock %}

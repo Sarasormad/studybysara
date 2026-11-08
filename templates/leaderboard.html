@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard · TutorConnect{% endblock %}
+{% block content %}
+<h1>Leaderboard</h1>
+<p class="sub">Points from Fundamentals answers and daily streaks. Only usernames are shown.</p>
+
+{% if is_student and not current_user.username %}
+  <div class="callout">
+    <span>🎮 You need a username to appear on the leaderboard.</span>
+    <a class="button-link primary" href="{{ url_for('profile_edit') }}">Pick a username</a>
+  </div>
+{% endif %}
+
+<nav class="tabs" aria-label="Leaderboard period">
+  <a href="{{ url_for('leaderboard', tab='week') }}" {% if tab == 'week' %}aria-current="page"{% endif %}>This Week</a>
+  <a href="{{ url_for('leaderboard', tab='all') }}" {% if tab == 'all' %}aria-current="page"{% endif %}>All Time</a>
+</nav>
+{% if tab == 'week' %}<p class="hint tab-hint">Resets every Monday at 12:00 AM (Pacific).</p>{% endif %}
+
+<section class="panel board-panel">
+  {% if rows %}
+    <table class="board">
+      <thead><tr><th scope="col">Rank</th><th scope="col">Username</th><th scope="col" class="num">Points</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr class="{{ 'me' if r.is_me }}">
+            <td class="rank">{% if r.rank == 1 %}🥇{% elif r.rank == 2 %}🥈{% elif r.rank == 3 %}🥉{% else %}{{ r.rank }}{% endif %}</td>
+            <td>@{{ r.username }}{% if r.is_me %} <span class="you">you</span>{% endif %}</td>
+            <td class="num">{{ r.points }}</td>
+          </tr>
+        {% endfor %}
+        {% if me %}
+          <tr class="gap" aria-hidden="true"><td colspan="3">⋯</td></tr>
+          <tr class="me">
+            <td class="rank">{{ me.rank }}</td>
+            <td>@{{ me.username }} <span class="you">you</span></td>
+            <td class="num">{{ me.points }}</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">No points yet {{ 'this week' if tab == 'week' else '' }}. Be the first: start a Fundamentals round!</p>
+  {% endif %}
+
+  {% if is_student and current_user.username and not me and not (rows | selectattr('is_me') | list) %}
+    <p class="hint board-hint">You're not on the board {{ 'this week' if tab == 'week' else 'yet' }}.
+      Answer Fundamentals questions or secure a streak day to earn points.</p>
+  {% endif %}
+</section>
+{% endblock %}

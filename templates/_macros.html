@@ -11,3 +11,23 @@
           style="--size: {{ size }}px; --hue: {{ label|hue }}">{{ label[0]|upper }}</span>
   {%- endif -%}
 {%- endmacro %}
+
+{# Today's practice time and streak, e.g. "6 of 10 minutes today". `status` comes from practice_status(). #}
+{% macro today_progress(status, compact=false) -%}
+  <div class="today{{ ' today-compact' if compact }}{{ ' today-done' if status.secured }}">
+    <div class="today-row">
+      <span class="streak-flame" title="Current streak">🔥 {{ status.current_streak }} day{{ '' if status.current_streak == 1 else 's' }}</span>
+      {% if status.secured %}
+        <span class="today-text"><strong>Streak secured!</strong> +{{ status.today_bonus }} points.
+          Come back tomorrow for +{{ status.tomorrow_bonus }}.</span>
+      {% else %}
+        <span class="today-text"><strong>{{ status.today_minutes }} of {{ status.goal_minutes }} minutes</strong> today
+          {%- if not compact %} · finish to earn +{{ status.bonus_if_finished }} streak points{% endif %}</span>
+      {% endif %}
+    </div>
+    <div class="meter" role="progressbar" aria-label="Practice time today"
+         aria-valuemin="0" aria-valuemax="{{ status.goal_minutes }}" aria-valuenow="{{ status.today_minutes }}">
+      <span style="width: {{ status.percent }}%"></span>
+    </div>
+  </div>
+{%- endmacro %}

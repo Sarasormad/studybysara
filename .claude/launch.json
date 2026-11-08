@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "tutor-app",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["app.py"],
-      "port": 5001
+      "runtimeExecutable": ".venv/bin/flask",
+      "runtimeArgs": ["--app", "app", "run", "--port", "5002"],
+      "port": 5002
     }
   ]
 }

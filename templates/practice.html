@@ -58,11 +58,23 @@
       {% endif %}
     </section>
 
-    <section class="mode-card mode-soon">
+    <section class="mode-card" id="photo-practice">
       <span class="tile-icon" aria-hidden="true">📷</span>
       <h2>Photo practice</h2>
-      <p>Snap a problem from your homework and practice similar ones. Counts toward your streak.</p>
-      <p class="soon-tag">Coming soon</p>
+      <p>Snap a problem from your homework and get 5 similar ones to practice. Counts toward your streak.</p>
+      <form method="post" action="{{ url_for('start_photo') }}" enctype="multipart/form-data"
+            class="photo-form" data-ai-form>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <label class="file-button photo-pick">
+          <span id="photo-label">Choose or take a photo</span>
+          <input type="file" name="photo" id="photo-input" accept="image/*,.heic,.heif" required {{ 'disabled' if ai_left == 0 }}>
+        </label>
+        <img id="photo-preview" class="photo-preview" alt="" hidden>
+        <button type="submit" {{ 'disabled' if ai_left == 0 }}>Make my questions</button>
+        <p class="hint photo-note">JPG, PNG or HEIC, up to {{ max_upload_mb }} MB. Your photo is only used to
+          make the questions and is never saved.</p>
+        <p class="generating" role="status" hidden>⏳ Reading your photo… this can take up to 30 seconds.</p>
+      </form>
     </section>
   </div>
 
@@ -71,7 +83,8 @@
       <h2>📚 Topic practice</h2>
       <span class="ai-left {{ 'none-left' if ai_left == 0 }}">{{ ai_left }} of {{ ai_limit }} AI sets left today</span>
     </div>
-    <p class="hint">Pick a topic and get 5 fresh questions. Counts toward your streak and stats, not leaderboard points.</p>
+    <p class="hint">Pick a topic and get 5 fresh questions. Counts toward your streak and stats, not leaderboard points.
+      Topic and photo practice share the daily AI sets.</p>
     {% if ai_left == 0 %}
       <p class="empty">You've used today's AI sets. They reset at midnight (Pacific). Fundamentals is unlimited!</p>
     {% endif %}
@@ -98,3 +111,27 @@
 {% endif %}
 {% endblock %}
 
+{% block scripts %}
+<script>
+  // Preview the chosen photo and catch files that are too big before uploading.
+  const input = document.getElementById("photo-input");
+  if (input) {
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      const preview = document.getElementById("photo-preview");
+      if (!file) return;
+      if (file.size > {{ max_upload_mb }} * 1024 * 1024) {
+        alert("That photo is too big. Photos must be under {{ max_upload_mb }} MB.");
+        input.value = "";
+        preview.hidden = true;
+        return;
+      }
+      document.getElementById("photo-label").textContent = "Change photo";
+      // Browsers can't preview HEIC; the server still reads it.
+      if (/heic|heif/i.test(file.type + file.name)) { preview.hidden = true; return; }
+      preview.src = URL.createObjectURL(file);
+      preview.hidden = false;
+    });
+  }
+</script>
+{% endblock %}

@@ -28,3 +28,4 @@ AI_MODEL = _os.environ.get("STUDYBYSARA_AI_MODEL", "claude-opus-5-5")
 AI_EFFORT = _os.environ.get("STUDYBYSARA_AI_EFFORT", "medium")   # low | medium | high
 AI_DAILY_LIMIT = 20                   # topic + photo generations per student per day
 AI_SET_SIZE = 5                       # questions per AI set
+PHOTO_MAX_SIDE = 1568                 # px; photos are shrunk to this before going to the API

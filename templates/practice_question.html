@@ -105,7 +105,7 @@
     <h2>{{ 'Round' if pset.source == 'fundamentals' else 'Set' }} complete! 🎉</h2>
     <p class="score"><strong>{{ correct }}</strong> of {{ total }} correct
       {%- if pset.source == 'fundamentals' %} · <strong>+{{ points }}</strong> points
-      {%- else %} · counts toward your streak and {{ pset.topic }} stats{% endif %}</p>
+      {%- else %} · counts toward your streak and {{ rows[0].topic }} stats{% endif %}</p>
     <ol class="review-list">
       {% for r in rows %}
         <li class="{{ 'is-right' if r.is_correct else 'is-wrong' }}">
@@ -122,10 +122,11 @@
           <button type="submit">Another round</button>
         </form>
         <a class="button-link" href="{{ url_for('leaderboard') }}">Leaderboard</a>
-      {% elif ai_topic_key(pset.topic) %}
+      {% elif ai_topic_key(pset.topic if pset.source == 'topic' else rows[0].topic) %}
+        {% set more = pset.topic if pset.source == 'topic' else rows[0].topic %}
         <form method="post" action="{{ url_for('start_topic') }}" data-ai-form>
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <button type="submit" name="topic" value="{{ ai_topic_key(pset.topic) }}">5 more on {{ pset.topic }}</button>
+          <button type="submit" name="topic" value="{{ ai_topic_key(more) }}">5 more on {{ more }}</button>
           <p class="generating hint" role="status" hidden>⏳ Making your questions…</p>
         </form>
         <a class="button-link" href="{{ url_for('practice') }}">Pick another topic</a>

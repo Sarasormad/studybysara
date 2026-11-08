@@ -179,8 +179,12 @@ app.jinja_env.globals["csrf_token"] = csrf_token
 
 @app.errorhandler(RequestEntityTooLarge)
 def too_large(_exc):
-    flash(f"That file is too big. Pictures must be under {MAX_UPLOAD_MB} MB.", "error")
-    return redirect(url_for("profile_edit") if session.get("user_id") else url_for("login"))
+    flash(f"That file is too big. Photos must be under {MAX_UPLOAD_MB} MB.", "error")
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    if request.path.startswith("/practice"):
+        return redirect(url_for("practice") + "#photo-practice")
+    return redirect(url_for("profile_edit"))
 
 
 @app.before_request
@@ -486,7 +490,8 @@ def practice():
     return render_template("practice.html", status=pr.practice_status(db, user["id"], now),
                            unfinished=unfinished, answered=answered, round_size=FUNDAMENTALS_ROUND_SIZE,
                            fits=fits, others=others, test_prep=test_prep, in_progress_ai=in_progress_ai,
-                           ai_left=pr.ai_generations_left(db, user["id"], now), ai_limit=AI_DAILY_LIMIT)
+                           ai_left=pr.ai_generations_left(db, user["id"], now), ai_limit=AI_DAILY_LIMIT,
+                           max_upload_mb=MAX_UPLOAD_MB)
 
 
 @app.route("/practice/topic/start", methods=["POST"])
@@ -509,6 +514,41 @@ def start_topic():
     set_id = pr.create_set(db, user["id"], "topic", problems, pr.utcnow(),
                            topic=topic["name"], grade_level=user["grade_level"])
     pr.record_ai_generation(db, user["id"], "topic", topic["name"], set_id, now)
+    return redirect(url_for("practice_set", set_id=set_id))
+
+
+@app.route("/practice/photo/start", methods=["POST"])
+@student_required
+def start_photo():
+    """Turn a photo of a problem into 5 similar AI questions. The photo is processed in
+    memory and never saved: only the generated questions are stored."""
+    user, db, now = current_user(), get_db(), pr.utcnow()
+    back = redirect(url_for("practice") + "#photo-practice")
+    if pr.ai_generations_left(db, user["id"], now) <= 0:
+        flash(f"You've used all {AI_DAILY_LIMIT} AI question sets for today. Fundamentals is unlimited!", "error")
+        return back
+    upload = request.files.get("photo")
+    if not upload or not upload.filename:
+        flash("Choose a photo first.", "error")
+        return back
+    try:
+        photo = ai.prepare_photo(upload)
+    except ai.AIError as e:
+        flash(str(e), "error")
+        return back
+    try:
+        topic, concept, problems = ai.generate_photo_questions(photo)
+    except ai.PhotoRejected as e:
+        # The model did look at the photo (blurry / not math), so it used one of today's AI sets.
+        pr.record_ai_generation(db, user["id"], "photo", None, None, now)
+        flash(str(e), "error")
+        return back
+    except ai.AIError as e:                         # our side or the API failed: no set used
+        flash(str(e), "error")
+        return back
+    set_id = pr.create_set(db, user["id"], "photo", problems, pr.utcnow(),
+                           topic=concept, grade_level=user["grade_level"])
+    pr.record_ai_generation(db, user["id"], "photo", topic, set_id, now)
     return redirect(url_for("practice_set", set_id=set_id))
 
 

@@ -10,7 +10,8 @@ from datetime import datetime, timedelta, timezone
 
 import streaks
 from config import (DAILY_GOAL_SECONDS, FUNDAMENTALS_POINTS, LEADERBOARD_SIZE,
-                    STREAK_BONUS_CAP)
+                    RECENT_ATTEMPTS_SHOWN, STREAK_BONUS_CAP, WEAK_TOPIC_MIN_ATTEMPTS,
+                    WEAK_TOPICS_SHOWN)
 from grading import answers_match
 
 SCHEMA = """
@@ -288,3 +289,59 @@ def leaderboard(db, since, viewer_id=None, limit=LEADERBOARD_SIZE):
         if mine:
             me = {"rank": mine["rank"], "username": mine["username"], "points": mine["points"], "is_me": True}
     return rows, me
+
+
+# ---------- Dashboard stats ----------
+def user_rank(db, since, user_id):
+    """The student's leaderboard rank since `since` (None = all time), or None if unranked."""
+    rows, me = leaderboard(db, since, viewer_id=user_id, limit=LEADERBOARD_SIZE)
+    mine = next((r for r in rows if r["is_me"]), me)
+    return mine["rank"] if mine else None
+
+
+def topic_accuracy(db, user_id):
+    """Accuracy per topic across every practice type, weakest first.
+
+    Each row: topic, answered, correct, accuracy (0-100), weak (True for the
+    WEAK_TOPICS_SHOWN lowest topics with enough answers that aren't perfect).
+    """
+    rows = db.execute(
+        """SELECT p.topic AS topic, COUNT(*) AS answered, SUM(a.is_correct) AS correct
+           FROM attempts a JOIN problems p ON p.id = a.problem_id
+           WHERE a.user_id = ? AND p.topic IS NOT NULL
+           GROUP BY p.topic""", (user_id,)).fetchall()
+    stats = [{"topic": r["topic"], "answered": r["answered"], "correct": r["correct"],
+              "accuracy": round(100 * r["correct"] / r["answered"]), "weak": False} for r in rows]
+    # Weakest first; among equal accuracy, the one with more evidence first.
+    stats.sort(key=lambda s: (s["correct"] / s["answered"], -s["answered"], s["topic"]))
+    candidates = [s for s in stats if s["answered"] >= WEAK_TOPIC_MIN_ATTEMPTS and s["correct"] < s["answered"]]
+    for s in candidates[:WEAK_TOPICS_SHOWN]:
+        s["weak"] = True
+    return stats
+
+
+def recent_attempts(db, user_id, limit=RECENT_ATTEMPTS_SHOWN):
+    return db.execute(
+        """SELECT a.submitted_answer, a.is_correct, a.points_awarded, a.created_at,
+                  p.question_text, p.topic, p.source, p.correct_answer
+           FROM attempts a JOIN problems p ON p.id = a.problem_id
+           WHERE a.user_id = ? ORDER BY a.id DESC LIMIT ?""", (user_id, limit)).fetchall()
+
+
+def student_summary(db, user_id, now):
+    """One row of the tutor's student table."""
+    totals = db.execute("SELECT COUNT(*), COALESCE(SUM(is_correct), 0), MAX(created_at) FROM attempts "
+                        "WHERE user_id = ?", (user_id,)).fetchone()
+    answered, correct, last = totals
+    week_answered = db.execute("SELECT COUNT(*) FROM attempts WHERE user_id = ? AND created_at >= ?",
+                               (user_id, to_db(streaks.week_start_utc(now)))).fetchone()[0]
+    topics = topic_accuracy(db, user_id)
+    weakest = next((t for t in topics if t["weak"]), None)
+    return {
+        "last_active": from_db(last),
+        "current_streak": streaks.current_streak(qualifying_days(db, user_id), streaks.practice_day(now)),
+        "week_answered": week_answered,
+        "answered": answered,
+        "accuracy": round(100 * correct / answered) if answered else None,
+        "weakest_topic": weakest["topic"] if weakest else None,
+    }

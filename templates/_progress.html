@@ -1,0 +1,66 @@
+{# Progress panels shared by the student dashboard and the tutor's student page.
+   Import with: {% from "_progress.html" import topic_panel, attempts_panel %} #}
+
+{# Accuracy by topic, weakest first. `can_practice` shows "Practice this" buttons (students only). #}
+{% macro topic_panel(topics, can_practice=false, title="Accuracy by topic") -%}
+<section class="panel wide-panel">
+  <h2>{{ title }}</h2>
+  {% if topics %}
+    <ul class="topic-list">
+      {% for t in topics %}
+        <li class="topic-row{{ ' is-weak' if t.weak }}">
+          <div class="topic-head">
+            <span class="topic-name">
+              {{ t.topic }}
+              {% if t.weak %}<span class="weak-tag">Needs practice</span>{% endif %}
+            </span>
+            <span class="topic-score"><strong>{{ t.accuracy }}%</strong> · {{ t.correct }}/{{ t.answered }}</span>
+          </div>
+          <div class="meter topic-meter"><span style="width: {{ t.accuracy }}%"></span></div>
+          {% if can_practice and t.weak %}
+            {% if fundamentals_topic(t.topic) %}
+              <form method="post" action="{{ url_for('start_fundamentals') }}" class="practice-this">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <input type="hidden" name="topic" value="{{ t.topic }}">
+                <button type="submit" class="small">Practice this →</button>
+              </form>
+            {% else %}
+              <a class="button-link primary small-link" href="{{ url_for('practice') }}">Practice this →</a>
+            {% endif %}
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="hint">Topics need {{ weak_min }} or more answers before they can be marked "Needs practice".</p>
+  {% else %}
+    <p class="empty">No answers yet. Stats appear after the first practice round.</p>
+  {% endif %}
+</section>
+{%- endmacro %}
+
+{# Most recent answers with right/wrong. #}
+{% macro attempts_panel(attempts, title="Recent answers") -%}
+<section class="panel wide-panel">
+  <h2>{{ title }}</h2>
+  {% if attempts %}
+    <ul class="attempt-list">
+      {% for a in attempts %}
+        <li class="{{ 'is-right' if a.is_correct else 'is-wrong' }}">
+          <span class="mark" aria-label="{{ 'correct' if a.is_correct else 'wrong' }}">{{ '✓' if a.is_correct else '✗' }}</span>
+          <div class="attempt-body">
+            <span class="attempt-q">{{ a.question_text }}</span>
+            <small>
+              Answered <b>{{ a.submitted_answer }}</b>
+              {%- if not a.is_correct %} · correct: <b>{{ a.correct_answer }}</b>{% endif %}
+              · {{ a.topic }} · {{ source_labels[a.source] }} · {{ a.created_at|local_time }}
+            </small>
+          </div>
+          {% if a.points_awarded %}<span class="points-pill">+{{ a.points_awarded }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">No answers yet.</p>
+  {% endif %}
+</section>
+{%- endmacro %}

@@ -280,11 +280,17 @@ def choices_for(q, rng):
     return options
 
 
-def make_round(grade_level, size=10, rng=None):
-    """A list of `size` problem dicts, half multiple choice and half short answer."""
+def topic_key(topic_name):
+    """'Fractions' -> 'fractions', or None if it isn't a Fundamentals topic."""
+    return next((k for k, name in TOPICS.items() if name == topic_name), None)
+
+
+def make_round(grade_level, size=10, rng=None, focus=None):
+    """A list of `size` problem dicts, half multiple choice and half short answer.
+    `focus` (a TOPICS key) makes every question that topic: used by "Practice this"."""
     rng = rng or random.Random()
     tier = tier_for_grade(grade_level)
-    topics = TIER_TOPICS[tier][:]
+    topics = [focus] if focus in GENERATORS else TIER_TOPICS[tier][:]
     order = []
     while len(order) < size:            # spread topics evenly, in random order
         rng.shuffle(topics)

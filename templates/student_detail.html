@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar %}
+{% from "_progress.html" import topic_panel, attempts_panel %}
+{% block title %}{{ student.name }} · TutorConnect{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ url_for('dashboard') }}">← All students</a>
+
+<div class="profile-head detail-head">
+  {{ avatar(student, 64) }}
+  <div>
+    <h1>{{ student.name }}</h1>
+    <p class="sub">{{ '@' ~ student.username if student.username else 'No username' }} · {{ student.grade_level or 'Grade not set' }}</p>
+  </div>
+</div>
+
+<div class="stat-row">
+  <div class="stat"><span class="stat-value">{{ summary.last_active|ago }}</span><span class="stat-label">last active</span></div>
+  <div class="stat"><span class="stat-value">🔥 {{ summary.current_streak }}</span><span class="stat-label">day streak (best {{ status.best_streak }})</span></div>
+  <div class="stat"><span class="stat-value">{{ summary.week_answered }}</span><span class="stat-label">answered this week</span></div>
+  <div class="stat"><span class="stat-value">{{ (summary.accuracy ~ '%') if summary.accuracy is not none else '—' }}</span><span class="stat-label">overall accuracy ({{ summary.answered }} answers)</span></div>
+  <div class="stat"><span class="stat-value">{{ status.today_minutes }}/{{ status.goal_minutes }}</span><span class="stat-label">minutes today</span></div>
+</div>
+
+{{ topic_panel(topics) }}
+{{ attempts_panel(attempts, title="Recent answers (last 25)") }}
+{% endblock %}

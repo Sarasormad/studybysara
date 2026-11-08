@@ -390,3 +390,56 @@ button.nav-logout:hover { background: #eef0ff; }
   .choices { grid-template-columns: 1fr; }
   .q-text { font-size: 1.3rem; }
 }
+
+/* ======================= Dashboards ======================= */
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; max-width: 760px; }
+.dash-grid .panel { max-width: none; margin-bottom: 0; }
+.dash-grid + .panel, .dash-grid ~ .wide-panel { margin-top: 16px; }
+.page .wide-panel { max-width: 760px; }
+.panel .button-link:not(.primary) { padding-left: 0; }
+
+/* Accuracy by topic */
+.topic-list { list-style: none; margin: 0; padding: 0; }
+.topic-row { padding: 10px 0; border-top: 1px solid var(--border); }
+.topic-row:first-child { border-top: none; }
+.topic-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.topic-name { font-weight: 600; }
+.topic-score { color: var(--muted); font-size: 0.9rem; }
+.topic-score strong { color: var(--text); }
+.topic-meter span { background: var(--right); }
+.is-weak .topic-meter span { background: var(--gold); }
+.is-weak { background: #fffbeb; margin: 0 -16px; padding: 10px 16px; border-radius: 8px; }
+.weak-tag { display: inline-block; font-size: 0.75rem; font-weight: 700; color: var(--gold); background: #fef3c7; padding: 1px 8px; border-radius: 999px; margin-left: 6px; white-space: nowrap; }
+td .weak-tag { margin-left: 0; }
+.practice-this { margin-top: 8px; }
+button.small, .small-link { margin: 8px 0 0; padding: 6px 14px; font-size: 0.85rem; }
+.practice-this button.small { margin-top: 0; }
+
+/* Recent answers */
+.attempt-list { list-style: none; margin: 0; padding: 0; }
+.attempt-list li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
+.attempt-list li:first-child { border-top: none; }
+.attempt-list .mark { font-weight: 700; width: 1.2em; flex-shrink: 0; }
+.attempt-list .is-right .mark { color: var(--right); }
+.attempt-list .is-wrong .mark { color: var(--wrong); }
+.attempt-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.attempt-q { font-weight: 600; overflow-wrap: anywhere; }
+.attempt-body small { color: var(--muted); }
+
+/* Tutor's student table */
+.table-scroll { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+.data-table { width: 100%; border-collapse: collapse; min-width: 640px; }
+.data-table th { text-align: left; color: var(--muted); font-size: 0.8rem; font-weight: 600; padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.data-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table .num { text-align: right; white-space: nowrap; }
+.data-table small { color: var(--muted); }
+.data-table tbody tr:hover { background: var(--bg); }
+.row-link { color: var(--text); text-decoration: none; }
+.row-link strong { display: block; color: var(--accent); }
+.row-link small { display: block; }
+.detail-head { margin-top: 12px; }
+.detail-head h1 { margin-bottom: 2px; }
+.page .full-panel { max-width: none; }
+.nowrap { white-space: nowrap; }
+form.practice-this { align-items: flex-start; }

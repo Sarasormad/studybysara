@@ -15,8 +15,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import practice as pr          # (the route function below is also called practice)
 import streaks
-from fundamentals import make_round
-from config import FUNDAMENTALS_ROUND_SIZE
+from fundamentals import TOPICS, make_round, topic_key
+from config import FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # STUDYBYSARA_DB lets tests and scripts point the app at a different database file.
@@ -207,6 +207,41 @@ def hue(text):
     return sum(map(ord, text or "?")) * 37 % 360
 
 
+@app.template_filter("ago")
+def ago(moment):
+    """'just now', '5 minutes ago', '3 hours ago', 'yesterday', '4 days ago', or a date."""
+    if moment is None:
+        return "Never"
+    seconds = (pr.utcnow() - moment).total_seconds()
+    if seconds < 60:
+        return "Just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)} min ago"
+    days = (streaks.practice_day(pr.utcnow()) - streaks.practice_day(moment)).days
+    if days == 0:
+        return f"{int(seconds // 3600)} hr ago"
+    if days == 1:
+        return "Yesterday"
+    if days < 7:
+        return f"{days} days ago"
+    return local_time(moment, "%b %-d")
+
+
+@app.template_filter("local_time")
+def local_time(moment, fmt="%b %-d, %-I:%M %p"):
+    """Show a stored UTC time in the app's time zone (Pacific)."""
+    if isinstance(moment, str):
+        moment = pr.from_db(moment)
+    return moment.astimezone(PRACTICE_TZ).strftime(fmt) if moment else ""
+
+
+# Lets templates ask "is this a Fundamentals topic?" for the "Practice this" button.
+app.jinja_env.globals["fundamentals_topic"] = topic_key
+SOURCE_LABELS = {"fundamentals": "Fundamentals", "topic": "Topic practice", "photo": "Photo practice"}
+app.jinja_env.globals["source_labels"] = SOURCE_LABELS
+app.jinja_env.globals["weak_min"] = WEAK_TOPIC_MIN_ATTEMPTS
+
+
 @app.context_processor
 def inject_user():
     """Make `current_user` available in every template (used by the header bar)."""
@@ -340,7 +375,7 @@ def linked_people(user):
     db = get_db()
     if user["role"] == "tutor":
         students = db.execute(
-            "SELECT name, email, grade_level, username, avatar, created_at FROM users "
+            "SELECT id, name, email, grade_level, username, avatar, created_at FROM users "
             "WHERE role = 'student' AND tutor_id = ? ORDER BY name",
             (user["id"],),
         ).fetchall()
@@ -446,13 +481,16 @@ def practice():
 @app.route("/practice/fundamentals/start", methods=["POST"])
 @student_required
 def start_fundamentals():
+    """Start a mixed round, or a focused one when the form sends a topic ("Practice this")."""
     user, db = current_user(), get_db()
-    existing = pr.unfinished_set(db, user["id"], "fundamentals")
-    if existing:                                    # finish the current round first
-        return redirect(url_for("practice_set", set_id=existing["id"]))
-    problems = make_round(user["grade_level"], size=FUNDAMENTALS_ROUND_SIZE)
+    focus = topic_key(request.form.get("topic"))
+    if not focus:
+        existing = pr.unfinished_set(db, user["id"], "fundamentals")
+        if existing:                                # finish the current mixed round first
+            return redirect(url_for("practice_set", set_id=existing["id"]))
+    problems = make_round(user["grade_level"], size=FUNDAMENTALS_ROUND_SIZE, focus=focus)
     set_id = pr.create_set(db, user["id"], "fundamentals", problems, pr.utcnow(),
-                           topic="Fundamentals", grade_level=user["grade_level"])
+                           topic=TOPICS[focus] if focus else "Fundamentals", grade_level=user["grade_level"])
     return redirect(url_for("practice_set", set_id=set_id))
 
 
@@ -525,10 +563,38 @@ def leaderboard():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    user = current_user()
+    user, db, now = current_user(), get_db(), pr.utcnow()
     students, tutor = linked_people(user)
-    status = pr.practice_status(get_db(), user["id"], pr.utcnow()) if user["role"] == "student" else None
-    return render_template("dashboard.html", user=user, students=students, tutor=tutor, status=status)
+    if user["role"] == "tutor":
+        rows = [{"student": s, **pr.student_summary(db, s["id"], now)} for s in students]
+        return render_template("dashboard.html", user=user, rows=rows)
+    return render_template(
+        "dashboard.html", user=user, tutor=tutor,
+        status=pr.practice_status(db, user["id"], now),
+        week_rank=pr.user_rank(db, streaks.week_start_utc(now), user["id"]) if user["username"] else None,
+        topics=pr.topic_accuracy(db, user["id"]),
+        attempts=pr.recent_attempts(db, user["id"]),
+    )
+
+
+@app.route("/dashboard/students/<int:student_id>")
+@login_required
+def student_detail(student_id):
+    """A tutor's view of one linked student. Anyone else gets a 404."""
+    user, db, now = current_user(), get_db(), pr.utcnow()
+    if user["role"] != "tutor":
+        abort(404)
+    student = db.execute("SELECT id, name, username, avatar, grade_level FROM users "
+                         "WHERE id = ? AND role = 'student' AND tutor_id = ?", (student_id, user["id"])).fetchone()
+    if student is None:
+        abort(404)
+    return render_template(
+        "student_detail.html", student=student,
+        summary=pr.student_summary(db, student_id, now),
+        status=pr.practice_status(db, student_id, now),
+        topics=pr.topic_accuracy(db, student_id),
+        attempts=pr.recent_attempts(db, student_id, limit=25),
+    )
 
 
 @app.route("/link-tutor", methods=["POST"])

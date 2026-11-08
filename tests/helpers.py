@@ -33,10 +33,11 @@ def noon(day_offset=0, base=datetime(2026, 11, 2, tzinfo=timezone.utc)):
     return base.replace(hour=LA_NOON_UTC_HOUR) + timedelta(days=day_offset)
 
 
-def answer(db, user_id, served_at, seconds, source="fundamentals", correct=True):
+def answer(db, user_id, served_at, seconds, source="fundamentals", correct=True,
+           topic="Integer arithmetic", question="What is 2 + 2?"):
     """Serve one new question at `served_at` and answer it `seconds` later. Returns record_attempt's result."""
     set_id = pr.create_set(db, user_id, source, [{
-        "topic": "Integer arithmetic", "question_text": "What is 2 + 2?", "answer_type": "short_answer",
+        "topic": topic, "question_text": question, "answer_type": "short_answer",
         "choices": None, "correct_answer": "4", "explanation": "2 + 2 = 4."}], served_at)
     problem_id = db.execute("SELECT id FROM problems WHERE set_id = ?", (set_id,)).fetchone()[0]
     pr.mark_served(db, problem_id, served_at)

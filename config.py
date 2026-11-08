@@ -15,3 +15,8 @@ FUNDAMENTALS_ROUND_SIZE = 10
 
 # Leaderboard
 LEADERBOARD_SIZE = 50
+
+# Dashboards
+WEAK_TOPIC_MIN_ATTEMPTS = 3           # a topic needs this many answers before it can be called "weak"
+WEAK_TOPICS_SHOWN = 2                 # how many weakest topics to highlight
+RECENT_ATTEMPTS_SHOWN = 10

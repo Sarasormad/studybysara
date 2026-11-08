@@ -1,16 +1,14 @@
 {% extends "base.html" %}
 {% from "_macros.html" import avatar, today_progress %}
+{% from "_progress.html" import topic_panel, attempts_panel %}
 {% block title %}Dashboard · TutorConnect{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<p class="sub">
-  {% if user.role == 'tutor' %}Your tutor code and the students linked to you.
-  {% else %}Your details and your tutor.{% endif %}
-</p>
-
-<div class="panels">
 
 {% if user.role == 'tutor' %}
+  {# ======================= Tutor ======================= #}
+  <p class="sub">Your tutor code and how your students are doing.</p>
+
   <section class="panel">
     <h2>Your tutor code</h2>
     <div class="code-box">
@@ -20,38 +18,83 @@
     <p class="hint">Share this code with your students. When they enter it at signup, they'll appear below.</p>
   </section>
 
-  <section class="panel">
-    <h2>Your students ({{ students|length }})</h2>
-    {% if students %}
-      <ul class="people">
-        {% for s in students %}
-          <li>
-            <div class="person">{{ avatar(s, 40) }}<div><strong>{{ s.name }}</strong><small>{{ "@" ~ s.username if s.username else s.email }}</small></div></div>
-            <span class="tag">{{ s.grade_level or '—' }}</span>
-          </li>
-        {% endfor %}
-      </ul>
+  <section class="panel wide-panel full-panel">
+    <h2>Your students ({{ rows|length }})</h2>
+    {% if rows %}
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Student</th>
+              <th scope="col">Last active</th>
+              <th scope="col" class="num">Streak</th>
+              <th scope="col" class="num">This week</th>
+              <th scope="col" class="num">Accuracy</th>
+              <th scope="col">Weakest topic</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr>
+                <td>
+                  <a class="person row-link" href="{{ url_for('student_detail', student_id=r.student.id) }}">
+                    {{ avatar(r.student, 32) }}
+                    <span><strong>{{ r.student.name }}</strong>
+                      <small>{{ '@' ~ r.student.username if r.student.username else 'no username' }} · {{ r.student.grade_level or '—' }}</small></span>
+                  </a>
+                </td>
+                <td class="nowrap">{{ r.last_active|ago }}</td>
+                <td class="num">{% if r.current_streak %}🔥 {{ r.current_streak }}{% else %}0{% endif %}</td>
+                <td class="num">{{ r.week_answered }} <small>answered</small></td>
+                <td class="num">{{ (r.accuracy ~ '%') if r.accuracy is not none else '—' }}</td>
+                <td>{% if r.weakest_topic %}<span class="weak-tag">{{ r.weakest_topic }}</span>{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">Click a student to see their accuracy by topic and recent answers. "This week" resets Monday.</p>
     {% else %}
       <p class="empty">No students linked yet.</p>
     {% endif %}
     <p class="hint">Subjects: {{ user.subject }}</p>
   </section>
-{% else %}
-  <section class="panel">
-    <h2>Today</h2>
-    {{ today_progress(status) }}
-    <div class="stat-row">
-      <div class="stat"><span class="stat-value">{{ status.current_streak }}</span><span class="stat-label">day streak</span></div>
-      <div class="stat"><span class="stat-value">{{ status.best_streak }}</span><span class="stat-label">best streak</span></div>
-      <div class="stat"><span class="stat-value">{{ status.week_points }}</span><span class="stat-label">points this week</span></div>
-    </div>
-    <a class="button-link primary" href="{{ url_for('practice') }}">Practice now</a>
-  </section>
 
-  <section class="panel">
-    <h2>Your details</h2>
-    <p>Grade level: <strong>{{ user.grade_level or 'Not set' }}</strong></p>
-  </section>
+{% else %}
+  {# ======================= Student ======================= #}
+  <p class="sub">Your streaks, points and how you're doing in each topic.</p>
+
+  <div class="dash-grid">
+    <section class="panel">
+      <h2>Today</h2>
+      {{ today_progress(status) }}
+      <div class="stat-row">
+        <div class="stat"><span class="stat-value">🔥 {{ status.current_streak }}</span><span class="stat-label">day streak</span></div>
+        <div class="stat"><span class="stat-value">{{ status.best_streak }}</span><span class="stat-label">best streak</span></div>
+      </div>
+      <a class="button-link primary" href="{{ url_for('practice') }}">Practice now</a>
+    </section>
+
+    <section class="panel">
+      <h2>This week</h2>
+      <div class="stat-row">
+        <div class="stat"><span class="stat-value">{{ status.week_points }}</span><span class="stat-label">points</span></div>
+        <div class="stat">
+          <span class="stat-value">{{ ('#' ~ week_rank) if week_rank else '—' }}</span>
+          <span class="stat-label">rank</span>
+        </div>
+      </div>
+      {% if not user.username %}
+        <p class="hint">Set a username to get a rank. <a href="{{ url_for('profile_edit') }}">Pick one</a></p>
+      {% elif not week_rank %}
+        <p class="hint">Earn points from Fundamentals or a streak day to get ranked.</p>
+      {% endif %}
+      <a class="button-link" href="{{ url_for('leaderboard') }}">See leaderboard →</a>
+    </section>
+  </div>
+
+  {{ topic_panel(topics, can_practice=true) }}
+  {{ attempts_panel(attempts, title="Your last 10 answers") }}
 
   <section class="panel">
     <h2>Your tutor</h2>
@@ -74,7 +117,6 @@
     {% endif %}
   </section>
 {% endif %}
-</div>
 {% endblock %}
 
 {% block scripts %}

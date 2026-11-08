@@ -1,0 +1,13 @@
+{# Reusable template pieces. Import with: {% from "_macros.html" import avatar %} #}
+
+{# A round profile picture, or the person's initial on a colored circle if they have none. #}
+{% macro avatar(person, size=40) -%}
+  {%- set label = person.username or person.name -%}
+  {%- if person.avatar -%}
+    <img class="avatar" src="{{ url_for('avatar_file', filename=person.avatar) }}"
+         alt="" width="{{ size }}" height="{{ size }}" style="--size: {{ size }}px">
+  {%- else -%}
+    <span class="avatar avatar-initial" aria-hidden="true"
+          style="--size: {{ size }}px; --hue: {{ label|hue }}">{{ label[0]|upper }}</span>
+  {%- endif -%}
+{%- endmacro %}

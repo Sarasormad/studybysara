@@ -6,11 +6,19 @@ import sqlite3
 from functools import wraps
 
 from flask import (Flask, abort, flash, g, redirect, render_template, request,
-                   session, url_for)
+                   send_from_directory, session, url_for)
+from PIL import Image, ImageOps, UnidentifiedImageError
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE = os.path.join(BASE_DIR, "tutor_app.db")
+# Uploaded files live in instance/ (git-ignored), never in static/ or the repo.
+AVATAR_DIR = os.path.join(BASE_DIR, "instance", "avatars")
+AVATAR_SIZE = 256                      # saved as a 256x256 square
+MAX_UPLOAD_MB = 5
+Image.MAX_IMAGE_PIXELS = 40_000_000    # refuse "decompression bomb" images
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
 ROLES = ("student", "tutor")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 GRADE_LEVELS = (
@@ -24,6 +32,7 @@ CODE_LENGTH = 6
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024  # Flask rejects bigger requests
 
 
 # ---------- Database ----------
@@ -75,12 +84,16 @@ def init_db():
             "grade_level": "TEXT",                              # students only
             "tutor_code": "TEXT",                               # tutors only
             "tutor_id": "INTEGER REFERENCES users(id)",         # student -> their tutor
+            "username": "TEXT",                                 # students: public name for leaderboards
+            "avatar": "TEXT",                                   # filename in instance/avatars/
         }
         for column, ddl in new_columns.items():
             if column not in existing:
                 db.execute(f"ALTER TABLE users ADD COLUMN {column} {ddl}")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_tutor_code ON users(tutor_code)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_users_tutor_id ON users(tutor_id)")
+        # COLLATE NOCASE: "Sara_M" and "sara_m" count as the same username.
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username COLLATE NOCASE)")
         # Give a code to any tutor who signed up before codes existed.
         for (tutor_id,) in db.execute(
             "SELECT id FROM users WHERE role = 'tutor' AND tutor_code IS NULL"
@@ -94,6 +107,54 @@ def find_tutor_by_code(code):
     ).fetchone()
 
 
+# ---------- Usernames ----------
+def username_error(username, user_id=None):
+    """Return an error message if `username` can't be used, else None.
+    `user_id` lets a student keep their own current username."""
+    if not USERNAME_RE.match(username):
+        return "Usernames are 3–20 characters: letters, numbers and underscores only."
+    taken = get_db().execute(
+        "SELECT id FROM users WHERE username = ? COLLATE NOCASE AND id IS NOT ?",
+        (username, user_id),
+    ).fetchone()
+    if taken:
+        return "That username is taken. Try another."
+    return None
+
+
+# ---------- Profile pictures ----------
+def save_avatar(file_storage, user_id):
+    """Validate an uploaded image, crop it to a square, re-encode it, and return
+    the new filename. Raises ValueError with a friendly message if it's not usable.
+
+    Re-encoding with Pillow (instead of saving the upload as-is) means we only ever
+    store a clean image we created: no hidden scripts, and no EXIF metadata such as
+    the GPS location phones embed in photos.
+    """
+    try:
+        with Image.open(file_storage.stream) as img:
+            if img.format not in ("JPEG", "PNG", "GIF", "WEBP"):
+                raise ValueError("Upload a JPG, PNG, GIF or WebP image.")
+            img = ImageOps.exif_transpose(img)        # respect phone rotation, then drop EXIF
+            img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
+            img = ImageOps.fit(img, (AVATAR_SIZE, AVATAR_SIZE), Image.Resampling.LANCZOS)
+            os.makedirs(AVATAR_DIR, exist_ok=True)
+            # Random part = new URL on every upload, so browsers don't show a cached old picture.
+            filename = f"{user_id}-{secrets.token_hex(8)}.webp"
+            img.save(os.path.join(AVATAR_DIR, filename), "WEBP", quality=85)
+            return filename
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError):
+        raise ValueError("That file isn't an image we can read. Try a JPG or PNG.")
+
+
+def delete_avatar(filename):
+    if filename:
+        try:
+            os.remove(os.path.join(AVATAR_DIR, os.path.basename(filename)))
+        except FileNotFoundError:
+            pass
+
+
 # ---------- CSRF protection ----------
 def csrf_token():
     if "_csrf" not in session:
@@ -102,6 +163,12 @@ def csrf_token():
 
 
 app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def too_large(_exc):
+    flash(f"That file is too big. Pictures must be under {MAX_UPLOAD_MB} MB.", "error")
+    return redirect(url_for("profile_edit") if session.get("user_id") else url_for("login"))
 
 
 @app.before_request
@@ -114,10 +181,25 @@ def check_csrf():
 
 # ---------- Auth helpers ----------
 def current_user():
-    uid = session.get("user_id")
-    if uid is None:
-        return None
-    return get_db().execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    """The logged-in user's row, or None. Cached on `g` so it's queried once per request."""
+    if "user" not in g:
+        uid = session.get("user_id")
+        g.user = None if uid is None else get_db().execute(
+            "SELECT * FROM users WHERE id = ?", (uid,)
+        ).fetchone()
+    return g.user
+
+
+@app.template_filter("hue")
+def hue(text):
+    """Turn a name into a stable color (0-359) so each default avatar keeps its color."""
+    return sum(map(ord, text or "?")) * 37 % 360
+
+
+@app.context_processor
+def inject_user():
+    """Make `current_user` available in every template (used by the header bar)."""
+    return {"current_user": current_user()}
 
 
 def login_required(view):
@@ -133,13 +215,13 @@ def login_required(view):
 # ---------- Routes ----------
 @app.route("/")
 def index():
-    return redirect(url_for("dashboard") if current_user() else url_for("login"))
+    return redirect(url_for("home") if current_user() else url_for("login"))
 
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     form = {"name": "", "email": "", "role": request.args.get("role", "student"),
-            "subject": "", "grade_level": "", "tutor_code": ""}
+            "subject": "", "grade_level": "", "tutor_code": "", "username": ""}
     if request.method == "POST":
         form = {
             "name": request.form.get("name", "").strip(),
@@ -148,6 +230,7 @@ def signup():
             "subject": request.form.get("subject", "").strip(),
             "grade_level": request.form.get("grade_level", ""),
             "tutor_code": normalize_code(request.form.get("tutor_code")),
+            "username": request.form.get("username", "").strip(),
         }
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
@@ -165,6 +248,9 @@ def signup():
         if form["role"] == "student":
             if form["grade_level"] not in GRADE_LEVELS:
                 errors.append("Select your current grade level.")
+            problem = username_error(form["username"])
+            if problem:
+                errors.append(problem)
             if form["tutor_code"]:
                 tutor = find_tutor_by_code(form["tutor_code"])
                 if tutor is None:
@@ -180,19 +266,20 @@ def signup():
             try:
                 cur = db.execute(
                     """INSERT INTO users
-                       (name, email, password_hash, role, subject, grade_level, tutor_code, tutor_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (name, email, password_hash, role, subject, grade_level, tutor_code, tutor_id, username)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         form["name"], form["email"], generate_password_hash(password), form["role"],
                         form["subject"] if is_tutor else None,
                         None if is_tutor else form["grade_level"],
                         new_tutor_code(db) if is_tutor else None,
                         tutor["id"] if tutor else None,
+                        None if is_tutor else form["username"],
                     ),
                 )
                 db.commit()
             except sqlite3.IntegrityError:
-                errors.append("An account with that email already exists.")
+                errors.append("An account with that email (or username) already exists.")
             else:
                 session.clear()
                 session["user_id"] = cur.lastrowid
@@ -202,7 +289,7 @@ def signup():
                 elif tutor:
                     msg += f" You're linked to your tutor, {tutor['name']}."
                 flash(msg, "success")
-                return redirect(url_for("dashboard"))
+                return redirect(url_for("home"))
 
         for e in errors:
             flash(e, "error")
@@ -221,27 +308,112 @@ def login():
         else:
             session.clear()
             session["user_id"] = user["id"]
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("home"))
     return render_template("login.html", email=email)
+
+
+def linked_people(user):
+    """Return (students, tutor): a tutor's students, or a student's tutor."""
+    db = get_db()
+    if user["role"] == "tutor":
+        students = db.execute(
+            "SELECT name, email, grade_level, username, avatar, created_at FROM users "
+            "WHERE role = 'student' AND tutor_id = ? ORDER BY name",
+            (user["id"],),
+        ).fetchall()
+        return students, None
+    tutor = None
+    if user["tutor_id"]:
+        tutor = db.execute(
+            "SELECT name, email, subject FROM users WHERE id = ?", (user["tutor_id"],)
+        ).fetchone()
+    return [], tutor
+
+
+@app.route("/home")
+@login_required
+def home():
+    students, tutor = linked_people(current_user())
+    return render_template("home.html", students=students, tutor=tutor)
+
+
+@app.route("/profile")
+@login_required
+def profile():
+    students, tutor = linked_people(current_user())
+    return render_template("profile.html", students=students, tutor=tutor)
+
+
+@app.route("/profile/edit", methods=["GET", "POST"])
+@login_required
+def profile_edit():
+    """Students set their username and profile picture here.
+    (Exercise: extend this to edit name, grade level and subjects too.)"""
+    user = current_user()
+    if user["role"] != "student":
+        flash("Profile pictures and usernames are for student accounts.", "error")
+        return redirect(url_for("profile"))
+
+    form = {"username": user["username"] or ""}
+    if request.method == "POST":
+        db = get_db()
+        form["username"] = request.form.get("username", "").strip()
+        errors = []
+
+        problem = username_error(form["username"], user_id=user["id"])
+        if problem:
+            errors.append(problem)
+
+        new_avatar = None
+        upload = request.files.get("avatar")
+        if not errors and upload and upload.filename:
+            try:
+                new_avatar = save_avatar(upload, user["id"])
+            except ValueError as e:
+                errors.append(str(e))
+
+        if errors:
+            for e in errors:
+                flash(e, "error")
+        else:
+            avatar = user["avatar"]
+            if new_avatar:
+                delete_avatar(user["avatar"])
+                avatar = new_avatar
+            elif request.form.get("remove_avatar"):
+                delete_avatar(user["avatar"])
+                avatar = None
+            try:
+                db.execute("UPDATE users SET username = ?, avatar = ? WHERE id = ?",
+                           (form["username"], avatar, user["id"]))
+                db.commit()
+            except sqlite3.IntegrityError:          # someone grabbed the username a moment ago
+                delete_avatar(new_avatar)
+                flash("That username is taken. Try another.", "error")
+            else:
+                flash("Profile updated.", "success")
+                return redirect(url_for("profile"))
+    return render_template("profile_edit.html", form=form)
+
+
+@app.route("/avatars/<path:filename>")
+@login_required
+def avatar_file(filename):
+    # send_from_directory refuses paths like "../app.py", so users can only fetch avatars.
+    return send_from_directory(AVATAR_DIR, filename, max_age=60 * 60 * 24 * 365)
+
+
+@app.route("/practice")
+@login_required
+def practice():
+    return render_template("practice.html")
 
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    user = current_user()
-    db = get_db()
-    students, tutor = [], None
-    if user["role"] == "tutor":
-        students = db.execute(
-            "SELECT name, email, grade_level, created_at FROM users "
-            "WHERE role = 'student' AND tutor_id = ? ORDER BY name",
-            (user["id"],),
-        ).fetchall()
-    elif user["tutor_id"]:
-        tutor = db.execute(
-            "SELECT name, email, subject FROM users WHERE id = ?", (user["tutor_id"],)
-        ).fetchone()
-    return render_template("dashboard.html", user=user, students=students, tutor=tutor)
+    students, tutor = linked_people(current_user())
+    return render_template("dashboard.html", user=current_user(), students=students, tutor=tutor)
 
 
 @app.route("/link-tutor", methods=["POST"])

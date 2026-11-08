@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Practice Problems · TutorConnect{% endblock %}
+{% block content %}
+<h1>Practice Problems</h1>
+<p class="sub">
+  {% if current_user.role == 'tutor' %}Create problems and see how your students do on them.
+  {% else %}Work through problems from your tutor and track your progress.{% endif %}
+</p>
+
+<section class="panel empty-state">
+  <span class="tile-icon" aria-hidden="true">🚧</span>
+  <h2>Coming soon</h2>
+  <p class="empty">This is where practice problems and progress tracking will live. We'll build it next.</p>
+</section>
+{% endblock %}

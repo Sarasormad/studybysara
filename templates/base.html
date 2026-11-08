@@ -1,3 +1,4 @@
+{% from "_macros.html" import avatar %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -6,16 +7,54 @@
   <title>{% block title %}TutorConnect{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-  <main class="card">
-    <div class="brand">📚 TutorConnect</div>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for category, message in messages %}
-        <div class="flash flash-{{ category }}">{{ message }}</div>
-      {% endfor %}
-    {% endwith %}
+<body class="{{ 'app-layout' if current_user else 'auth-layout' }}">
+
+{% macro flashes() %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash flash-{{ category }}" role="status">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+{% endmacro %}
+
+{% if current_user %}
+  {# ---------- Logged-in layout: header bar + page content ---------- #}
+  {% set nav = [
+    ('profile',   'Profile'),
+    ('dashboard', 'Dashboard'),
+    ('practice',  'Practice Problems'),
+  ] %}
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('home') }}">📚 TutorConnect</a>
+      <nav aria-label="Main">
+        {% for endpoint, label in nav %}
+          <a href="{{ url_for(endpoint) }}"
+             {% if request.endpoint == endpoint or request.endpoint == endpoint ~ '_edit' %}aria-current="page"{% endif %}
+             {% if endpoint == 'profile' %}class="nav-profile"{% endif %}>
+            {%- if endpoint == 'profile' %}{{ avatar(current_user, 24) }}{% endif %}{{ label -}}
+          </a>
+        {% endfor %}
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button type="submit" class="nav-logout">Log out</button>
+        </form>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    {{ flashes() }}
     {% block content %}{% endblock %}
   </main>
-  {% block scripts %}{% endblock %}
+{% else %}
+  {# ---------- Logged-out layout: centered card (login / signup) ---------- #}
+  <main class="card">
+    <div class="brand">📚 TutorConnect</div>
+    {{ flashes() }}
+    {{ self.content() }}
+  </main>
+{% endif %}
+
+{% block scripts %}{% endblock %}
 </body>
 </html>

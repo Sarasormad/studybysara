@@ -17,12 +17,16 @@
 body {
   margin: 0;
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
+}
+
+/* Logged out (login / signup): one centered card */
+body.auth-layout {
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
 }
 
 .card {
@@ -112,7 +116,7 @@ select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-col
 .code-input::placeholder { text-transform: none; letter-spacing: normal; font-family: inherit; }
 
 /* ---------- Dashboard ---------- */
-.card:has(.panel) { max-width: 520px; }
+
 .panel { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .panel h2 { margin: 0 0 10px; font-size: 1rem; }
 .panel p { margin: 0 0 8px; }
@@ -135,3 +139,156 @@ button.small { margin: 0; padding: 6px 14px; font-size: 0.85rem; }
 .inline-form { flex-direction: row; gap: 8px; }
 .inline-form input[type="text"] { flex: 1; min-width: 0; }
 .inline-form button { margin: 0; }
+
+/* ---------- Logged-in layout: header bar ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.topbar-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.topbar .brand { margin: 0; text-decoration: none; font-size: 1.05rem; }
+.topbar nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.topbar nav a {
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.topbar nav a:hover { background: var(--bg); color: var(--text); }
+.topbar nav a[aria-current="page"] { background: #eef0ff; color: var(--accent); }
+.topbar nav form { display: block; margin-left: 4px; }
+button.nav-logout {
+  margin: 0;
+  padding: 7px 12px;
+  font-size: 0.92rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+button.nav-logout:hover { background: #eef0ff; }
+
+/* ---------- Logged-in layout: page content ---------- */
+.page { max-width: 960px; margin: 0 auto; padding: 28px 16px 48px; }
+.page h1 { font-size: 1.75rem; }
+.panels { max-width: 560px; }
+.mono { font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.1em; }
+
+/* Home */
+.hero { margin-bottom: 24px; }
+.eyebrow { margin: 0 0 8px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.tile {
+  display: block;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.tile:hover { border-color: var(--accent); box-shadow: 0 6px 20px rgba(79, 70, 229, 0.12); transform: translateY(-2px); }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile h2 { margin: 10px 0 6px; font-size: 1.1rem; }
+.tile p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.tile-icon { font-size: 1.6rem; }
+
+/* Panels on the full-width layout get a white background */
+.page .panel { background: var(--card); max-width: 560px; }
+
+/* Profile */
+.details { display: grid; grid-template-columns: max-content 1fr; gap: 12px 24px; margin: 0; }
+.details dt { color: var(--muted); font-size: 0.9rem; }
+.details dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+/* Practice placeholder */
+.empty-state { text-align: center; padding: 40px 16px; }
+.empty-state h2 { margin-top: 8px; }
+
+@media (max-width: 560px) {
+  .topbar-inner { flex-direction: column; align-items: stretch; }
+  .topbar nav { justify-content: space-between; }
+  .topbar nav a, button.nav-logout { padding: 7px 8px; font-size: 0.85rem; }
+  .details { grid-template-columns: 1fr; gap: 2px; }
+  .details dd { margin-bottom: 10px; }
+}
+
+/* ---------- Avatars & usernames ---------- */
+.avatar {
+  --size: 40px;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+  background: var(--bg);
+}
+.avatar-initial {
+  --hue: 240;
+  display: inline-grid;
+  place-items: center;
+  background: hsl(var(--hue) 70% 88%);
+  color: hsl(var(--hue) 55% 30%);
+  font-weight: 700;
+  font-size: calc(var(--size) * 0.42);
+  line-height: 1;
+}
+.person { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.person > div { min-width: 0; }
+.handle { color: var(--muted); font-weight: 600; font-size: 0.9rem; margin-left: 6px; }
+.hero-avatar { margin-bottom: 12px; }
+.profile-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.profile-head h1 { margin-bottom: 2px; }
+.profile-head .sub { margin: 0; }
+
+/* Callout on Home when a student hasn't set a username */
+.callout {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: #eef0ff; border: 1px solid #c7cbff; border-radius: 12px;
+  padding: 12px 16px; margin-bottom: 20px; font-weight: 600;
+}
+
+/* Edit profile */
+.avatar-edit { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.avatar-edit-controls { display: flex; flex-direction: column; gap: 8px; }
+.avatar-edit-controls .hint { margin: 0; }
+.file-button { position: relative; display: inline-block; align-self: flex-start; cursor: pointer; }
+.file-button span {
+  display: inline-block; padding: 8px 14px; border-radius: 8px;
+  border: 1px solid var(--accent); color: var(--accent); font-weight: 600;
+}
+.file-button:hover span { background: #eef0ff; }
+.file-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.file-button input:focus-visible + span,
+.file-button:focus-within span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.checkbox { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+.form-actions { display: flex; align-items: center; gap: 12px; }
+.form-actions button { margin: 0; }
+
+/* Link styled as a button */
+.button-link {
+  display: inline-block; padding: 10px 16px; border-radius: 8px;
+  font-weight: 600; text-decoration: none; color: var(--accent);
+}
+.button-link.primary { background: var(--accent); color: #fff; }
+.button-link.primary:hover { background: var(--accent-hover); }
+.panel .button-link.primary { margin-top: 16px; }
+.callout .button-link { padding: 8px 14px; }
+.topbar nav a.nav-profile { display: inline-flex; align-items: center; gap: 8px; }
+.topbar nav a.nav-profile .avatar-initial { font-size: 0.7rem; }

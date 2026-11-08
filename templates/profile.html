@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar %}
+{% block title %}Profile · TutorConnect{% endblock %}
+{% block content %}
+<div class="profile-head">
+  {{ avatar(current_user, 80) }}
+  <div>
+    <h1>{{ current_user.name }}</h1>
+    <p class="sub">
+      {% if current_user.username %}@{{ current_user.username }}{% else %}Your account details.{% endif %}
+    </p>
+  </div>
+</div>
+
+<section class="panel">
+  <dl class="details">
+    <dt>Name</dt>        <dd>{{ current_user.name }}</dd>
+    <dt>Email</dt>       <dd>{{ current_user.email }}</dd>
+    <dt>Account type</dt><dd><span class="badge badge-{{ current_user.role }}">{{ current_user.role|capitalize }}</span></dd>
+    {% if current_user.role == 'tutor' %}
+      <dt>Subjects</dt>   <dd>{{ current_user.subject }}</dd>
+      <dt>Tutor code</dt> <dd class="mono">{{ current_user.tutor_code }}</dd>
+      <dt>Students</dt>   <dd>{{ students|length }}</dd>
+    {% else %}
+      <dt>Username</dt>   <dd>{{ '@' ~ current_user.username if current_user.username else 'Not set' }}</dd>
+      <dt>Grade level</dt><dd>{{ current_user.grade_level or 'Not set' }}</dd>
+      <dt>Tutor</dt>      <dd>{{ tutor.name if tutor else 'Not linked' }}</dd>
+    {% endif %}
+    <dt>Member since</dt><dd>{{ current_user.created_at[:10] }}</dd>
+  </dl>
+  {% if current_user.role == 'student' %}
+    <a class="button-link primary" href="{{ url_for('profile_edit') }}">Edit profile</a>
+  {% endif %}
+</section>
+{% endblock %}

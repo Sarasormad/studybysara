@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar %}
+{% block title %}Edit profile · TutorConnect{% endblock %}
+{% block content %}
+<h1>Edit profile</h1>
+<p class="sub">Your username and picture appear on leaderboards and to your tutor.</p>
+
+<section class="panel">
+  {# enctype="multipart/form-data" is required, or the browser won't send the file. #}
+  <form method="post" action="{{ url_for('profile_edit') }}" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    <div class="avatar-edit">
+      <div id="avatar-preview">{{ avatar(current_user, 96) }}</div>
+      <div class="avatar-edit-controls">
+        <label class="file-button">
+          <span>{{ 'Change picture' if current_user.avatar else 'Upload a picture' }}</span>
+          <input type="file" name="avatar" id="avatar-input"
+                 accept="image/png,image/jpeg,image/gif,image/webp">
+        </label>
+        <p class="hint">JPG, PNG, GIF or WebP, up to 5 MB. We'll crop it to a square.</p>
+        {% if current_user.avatar %}
+          <label class="checkbox">
+            <input type="checkbox" name="remove_avatar" value="1"> Remove my picture
+          </label>
+        {% endif %}
+      </div>
+    </div>
+
+    <label>Username
+      <input type="text" name="username" value="{{ form.username }}" required
+             minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+"
+             autocomplete="username" spellcheck="false">
+    </label>
+    <p class="hint">3–20 letters, numbers or underscores. Pick something that isn't your real name.</p>
+
+    {# Exercise: add name and grade level fields here (see profile_edit() in app.py). #}
+
+    <div class="form-actions">
+      <button type="submit">Save changes</button>
+      <a class="button-link" href="{{ url_for('profile') }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Show the chosen picture right away, before it's uploaded.
+  const input = document.getElementById("avatar-input");
+  const preview = document.getElementById("avatar-preview");
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert("That file is too big. Pictures must be under 5 MB.");
+      input.value = "";
+      return;
+    }
+    const img = document.createElement("img");
+    img.className = "avatar";
+    img.style.setProperty("--size", "96px");
+    img.alt = "";
+    img.src = URL.createObjectURL(file);
+    preview.replaceChildren(img);
+  });
+</script>
+{% endblock %}

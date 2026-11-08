@@ -1,11 +1,14 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar %}
 {% block title %}Dashboard · TutorConnect{% endblock %}
 {% block content %}
-<h1>Hi, {{ user.name }} 👋</h1>
+<h1>Dashboard</h1>
 <p class="sub">
-  <span class="badge badge-{{ user.role }}">{{ user.role|capitalize }}</span>
-  {{ user.email }}
+  {% if user.role == 'tutor' %}Your tutor code and the students linked to you.
+  {% else %}Your details and your tutor.{% endif %}
 </p>
+
+<div class="panels">
 
 {% if user.role == 'tutor' %}
   <section class="panel">
@@ -23,7 +26,7 @@
       <ul class="people">
         {% for s in students %}
           <li>
-            <div><strong>{{ s.name }}</strong><small>{{ s.email }}</small></div>
+            <div class="person">{{ avatar(s, 40) }}<div><strong>{{ s.name }}</strong><small>{{ "@" ~ s.username if s.username else s.email }}</small></div></div>
             <span class="tag">{{ s.grade_level or '—' }}</span>
           </li>
         {% endfor %}
@@ -60,11 +63,7 @@
     {% endif %}
   </section>
 {% endif %}
-
-<form method="post" action="{{ url_for('logout') }}">
-  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-  <button type="submit" class="secondary">Log out</button>
-</form>
+</div>
 {% endblock %}
 
 {% block scripts %}

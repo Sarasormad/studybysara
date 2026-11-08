@@ -34,6 +34,12 @@
 
   <!-- Student-only fields -->
   <div class="role-fields" data-role="student">
+    <label>Username
+      <input type="text" name="username" value="{{ form.username }}" data-required
+             minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+"
+             placeholder="e.g. mathwhiz_42" autocomplete="username" spellcheck="false">
+    </label>
+    <p class="hint">Shown on leaderboards instead of your real name. 3–20 letters, numbers or underscores.</p>
     <label>Current grade level
       <select name="grade_level" data-required>
         <option value="" disabled {% if not form.grade_level %}selected{% endif %}>Select your grade…</option>

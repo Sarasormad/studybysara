@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar %}
+{% block title %}Home · TutorConnect{% endblock %}
+{% block content %}
+{% if current_user.role == 'student' and not current_user.username %}
+  <div class="callout">
+    <span>🎮 Pick a username and picture so you can show up on leaderboards.</span>
+    <a class="button-link primary" href="{{ url_for('profile_edit') }}">Set up profile</a>
+  </div>
+{% endif %}
+
+<section class="hero">
+  {% if current_user.role == 'student' %}<div class="hero-avatar">{{ avatar(current_user, 64) }}</div>{% endif %}
+  <p class="eyebrow">
+    <span class="badge badge-{{ current_user.role }}">{{ current_user.role|capitalize }}</span>
+    {% if current_user.username %}<span class="handle">@{{ current_user.username }}</span>{% endif %}
+  </p>
+  <h1>Welcome, {{ current_user.name.split()[0] }} 👋</h1>
+  {% if current_user.role == 'tutor' %}
+    <p class="sub">
+      {% if students %}You have {{ students|length }} student{{ 's' if students|length != 1 }} linked to you.
+      {% else %}No students yet. Share your code <strong class="mono">{{ current_user.tutor_code }}</strong> to get started.
+      {% endif %}
+    </p>
+  {% else %}
+    <p class="sub">
+      {{ current_user.grade_level or 'Student' }}
+      {% if tutor %} · Tutor: {{ tutor.name }}{% else %} · Not linked to a tutor yet{% endif %}
+    </p>
+  {% endif %}
+</section>
+
+<div class="tiles">
+  <a class="tile" href="{{ url_for('practice') }}">
+    <span class="tile-icon" aria-hidden="true">✏️</span>
+    <h2>Practice Problems</h2>
+    <p>{% if current_user.role == 'tutor' %}Create and assign problems for your students.
+       {% else %}Work on problems and track your progress.{% endif %}</p>
+  </a>
+  <a class="tile" href="{{ url_for('dashboard') }}">
+    <span class="tile-icon" aria-hidden="true">📊</span>
+    <h2>Dashboard</h2>
+    <p>{% if current_user.role == 'tutor' %}Your tutor code and your students.
+       {% else %}Your tutor and how you're doing.{% endif %}</p>
+  </a>
+  <a class="tile" href="{{ url_for('profile') }}">
+    <span class="tile-icon" aria-hidden="true">👤</span>
+    <h2>Profile</h2>
+    <p>Your account details.</p>
+  </a>
+</div>
+{% endblock %}

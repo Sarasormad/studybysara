@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Sign up · TutorConnect{% endblock %}
+{% block content %}
+<h1>Create your account</h1>
+<p class="sub">I am signing up as a…</p>
+
+<form method="post" action="{{ url_for('signup') }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+  <div class="roles">
+    <label class="role">
+      <input type="radio" name="role" value="student" {% if form.role != 'tutor' %}checked{% endif %}>
+      <span>🎓 Student<small>Find help with your classes</small></span>
+    </label>
+    <label class="role">
+      <input type="radio" name="role" value="tutor" {% if form.role == 'tutor' %}checked{% endif %}>
+      <span>🧑‍🏫 Tutor<small>Teach the subjects you know</small></span>
+    </label>
+  </div>
+
+  <label>Full name
+    <input type="text" name="name" value="{{ form.name }}" required autocomplete="name">
+  </label>
+  <label>Email
+    <input type="email" name="email" value="{{ form.email }}" required autocomplete="email">
+  </label>
+  <!-- Tutor-only fields -->
+  <div class="role-fields" data-role="tutor">
+    <label>Subjects you tutor
+      <input type="text" name="subject" value="{{ form.subject }}" placeholder="e.g. Calculus, Python, Chemistry" data-required>
+    </label>
+    <p class="hint">After signing up you'll get a unique tutor code to share with your students.</p>
+  </div>
+
+  <!-- Student-only fields -->
+  <div class="role-fields" data-role="student">
+    <label>Current grade level
+      <select name="grade_level" data-required>
+        <option value="" disabled {% if not form.grade_level %}selected{% endif %}>Select your grade…</option>
+        {% for g in grade_levels %}
+          <option value="{{ g }}" {% if form.grade_level == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label><span>Tutor code <span class="optional">(optional)</span></span>
+      <input type="text" name="tutor_code" value="{{ form.tutor_code }}" placeholder="e.g. K7M2QX"
+             maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" class="code-input">
+    </label>
+    <p class="hint">Have a tutor? Enter the code they gave you so they can follow your progress. You can also add it later.</p>
+  </div>
+  <label>Password
+    <input type="password" name="password" minlength="8" required autocomplete="new-password">
+  </label>
+  <label>Confirm password
+    <input type="password" name="confirm" minlength="8" required autocomplete="new-password">
+  </label>
+  <button type="submit">Sign up</button>
+</form>
+
+<p class="switch">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Show only the fields for the selected role; hidden fields are not required.
+  function sync() {
+    const role = document.querySelector('input[name="role"]:checked').value;
+    document.querySelectorAll(".role-fields").forEach(group => {
+      const active = group.dataset.role === role;
+      group.hidden = !active;
+      group.querySelectorAll("[data-required]").forEach(el => (el.required = active));
+    });
+  }
+  document.querySelectorAll('input[name="role"]').forEach(r => r.addEventListener("change", sync));
+  sync();
+</script>
+{% endblock %}

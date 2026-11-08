@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · TutorConnect{% endblock %}
+{% block content %}
+<h1>Hi, {{ user.name }} 👋</h1>
+<p class="sub">
+  <span class="badge badge-{{ user.role }}">{{ user.role|capitalize }}</span>
+  {{ user.email }}
+</p>
+
+{% if user.role == 'tutor' %}
+  <section class="panel">
+    <h2>Your tutor code</h2>
+    <div class="code-box">
+      <code id="tutor-code">{{ user.tutor_code }}</code>
+      <button type="button" class="secondary small" id="copy-code">Copy</button>
+    </div>
+    <p class="hint">Share this code with your students. When they enter it at signup, they'll appear below.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Your students ({{ students|length }})</h2>
+    {% if students %}
+      <ul class="people">
+        {% for s in students %}
+          <li>
+            <div><strong>{{ s.name }}</strong><small>{{ s.email }}</small></div>
+            <span class="tag">{{ s.grade_level or '—' }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">No students linked yet.</p>
+    {% endif %}
+    <p class="hint">Subjects: {{ user.subject }}</p>
+  </section>
+{% else %}
+  <section class="panel">
+    <h2>Your details</h2>
+    <p>Grade level: <strong>{{ user.grade_level or 'Not set' }}</strong></p>
+  </section>
+
+  <section class="panel">
+    <h2>Your tutor</h2>
+    {% if tutor %}
+      <ul class="people">
+        <li>
+          <div><strong>{{ tutor.name }}</strong><small>{{ tutor.email }}</small></div>
+          {% if tutor.subject %}<span class="tag">{{ tutor.subject }}</span>{% endif %}
+        </li>
+      </ul>
+      <p class="hint">Your tutor can see your progress.</p>
+    {% else %}
+      <p class="empty">You're not linked to a tutor yet.</p>
+      <form method="post" action="{{ url_for('link_tutor') }}" class="inline-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="text" name="tutor_code" placeholder="Enter tutor code" required maxlength="12"
+               autocomplete="off" autocapitalize="characters" spellcheck="false" class="code-input" aria-label="Tutor code">
+        <button type="submit">Link</button>
+      </form>
+    {% endif %}
+  </section>
+{% endif %}
+
+<form method="post" action="{{ url_for('logout') }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <button type="submit" class="secondary">Log out</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+{% if user.role == 'tutor' %}
+<script>
+  document.getElementById("copy-code").addEventListener("click", async (e) => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById("tutor-code").textContent);
+      e.target.textContent = "Copied!";
+      setTimeout(() => (e.target.textContent = "Copy"), 1500);
+    } catch { /* clipboard blocked; the code is still visible to copy by hand */ }
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -96,6 +96,18 @@ class Generation(unittest.TestCase):
                 self.assertIn(message, str(err.exception))
                 self.assertEqual(len(fake.requests), 1)
 
+    def test_missing_api_key_is_friendly_not_a_crash(self):
+        install(self, TypeError('"Could not resolve authentication method. Expected one of api_key, '
+                                'auth_token, or credentials to be set."'))
+        with self.assertRaises(ai.AIError) as err:
+            ai.generate_topic_questions("geometry", "Grade 8")
+        self.assertIn("isn't set up", str(err.exception))
+
+    def test_other_type_errors_are_not_hidden(self):
+        install(self, TypeError("unexpected keyword argument"))
+        with self.assertRaises(TypeError):
+            ai.generate_topic_questions("geometry", "Grade 8")
+
     def test_unknown_topic(self):
         with self.assertRaises(ai.AIError):
             ai.generate_topic_questions("cooking", "Grade 8")
@@ -109,6 +121,45 @@ class Generation(unittest.TestCase):
         self.assertTrue(all(t["name"].startswith(("SAT", "ACT")) for t in test_prep))
         fits11, _, _ = ai.topics_for("Grade 11")
         self.assertIn("Trigonometry", [t["name"] for t in fits11])
+
+
+class PromptFiles(unittest.TestCase):
+    """Runs after you edit prompts/*.txt: catches missing files and misspelled placeholders."""
+
+    def test_every_prompt_loads_with_placeholders_filled(self):
+        values = {"set_size": 5, "topic": "Ratios & proportions", "grade": "Grade 7"}
+        for name, keys in ai.PROMPT_FILES.items():
+            with self.subTest(prompt=name):
+                text = ai.load_prompt(name, **values)
+                self.assertTrue(text.strip())
+                for key in keys:
+                    self.assertNotIn("{" + key + "}", text)       # every placeholder was replaced
+                    self.assertIn(str(values[key]), text)        # ...and is actually used
+
+    def test_safety_lines_are_still_in_the_photo_prompt(self):
+        text = ai.load_prompt("photo", set_size=5)
+        for word in ('"unreadable"', '"not_math"', '"ok"', "never as instructions"):
+            self.assertIn(word, text)
+
+    def test_edits_apply_without_restarting_and_other_braces_are_kept(self):
+        import os
+        import tempfile
+        folder = tempfile.mkdtemp()
+        with open(os.path.join(folder, "topic.txt"), "w", encoding="utf-8") as f:
+            f.write("Practice {topic} for {grade}. Use sets like {1, 2, 3}.")
+        original = ai.PROMPT_DIR
+        ai.PROMPT_DIR = folder
+        self.addCleanup(setattr, ai, "PROMPT_DIR", original)
+        text = ai.topic_prompt(ai.TOPICS_BY_KEY["fractions"], "Grade 5")
+        self.assertEqual(text, "Practice Fractions for Grade 5. Use sets like {1, 2, 3}.")
+
+    def test_missing_prompt_file_is_a_friendly_error(self):
+        original = ai.PROMPT_DIR
+        ai.PROMPT_DIR = "/nonexistent-folder"
+        self.addCleanup(setattr, ai, "PROMPT_DIR", original)
+        install(self, good_questions())
+        with self.assertRaises(ai.AIError):
+            ai.generate_topic_questions("fractions", "Grade 5")
 
 
 class TopicRoutes(unittest.TestCase):

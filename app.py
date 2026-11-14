@@ -7,7 +7,14 @@ import sqlite3
 from contextlib import closing
 from functools import wraps
 
-from flask import (Flask, abort, flash, g, redirect, render_template, request,
+from dotenv import load_dotenv
+
+# Load secrets like ANTHROPIC_API_KEY from a .env file next to this one (git-ignored).
+# This runs before the imports below because config.py reads environment variables.
+# Variables already set in the terminal win over the file.
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
+from flask import (Flask, abort, flash, g, redirect, render_template, request,  # noqa: E402
                    send_from_directory, session, url_for)
 from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -719,6 +726,10 @@ def logout():
 
 
 init_db()
+
+if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+    app.logger.warning("ANTHROPIC_API_KEY is not set, so topic and photo practice will show "
+                       "'AI practice isn't set up yet'. Add it to .env (see .env.example).")
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)  # 5000 is used by AirPlay on macOS

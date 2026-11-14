@@ -62,60 +62,152 @@
 
 {% else %}
   {# ======================= Student ======================= #}
-  <p class="sub">Your streaks, points and how you're doing in each topic.</p>
+  <p class="sub">Your streak, your week, and what to practice next.</p>
 
-  <div class="dash-grid">
-    <section class="panel">
-      <h2>Today</h2>
-      {{ today_progress(status) }}
-      <div class="stat-row">
-        <div class="stat"><span class="stat-value">🔥 {{ status.current_streak }}</span><span class="stat-label">day streak</span></div>
-        <div class="stat"><span class="stat-value">{{ status.best_streak }}</span><span class="stat-label">best streak</span></div>
-      </div>
-      <a class="button-link primary" href="{{ url_for('practice') }}">Practice now</a>
+  {# ---------- Row 1: streak · this week · overall ---------- #}
+  <div class="sd-row sd-top">
+    <section class="panel sd-card sd-streak">
+      <h2>🔥 Streak</h2>
+      <p class="hero-num">{{ status.current_streak }}<span class="hero-unit"> day{{ '' if status.current_streak == 1 else 's' }}</span></p>
+      {% if status.secured %}
+        <p class="sd-line"><strong>Today is done ✓</strong></p>
+        <p class="sd-reward">Come back tomorrow for <b>+{{ status.next_day_bonus }} points</b></p>
+      {% else %}
+        <p class="sd-line">{{ status.today_minutes }} of {{ status.goal_minutes }} minutes today</p>
+        <div class="meter" role="progressbar" aria-label="Practice time today" aria-valuemin="0"
+             aria-valuemax="{{ status.goal_minutes }}" aria-valuenow="{{ status.today_minutes }}"><span style="width: {{ status.percent }}%"></span></div>
+        <p class="sd-reward">Finish today for <b>+{{ status.bonus_if_finished }}</b>, then <b>+{{ status.next_day_bonus }}</b> tomorrow</p>
+      {% endif %}
+      <p class="hint">Best streak: {{ status.best_streak }} day{{ '' if status.best_streak == 1 else 's' }}</p>
     </section>
 
-    <section class="panel">
-      <h2>Points</h2>
-      <div class="stat-row">
-        <div class="stat"><span class="stat-value">{{ status.total_points }}</span><span class="stat-label">total points</span></div>
-        <div class="stat">
-          <span class="stat-value">{{ ('#' ~ board_rank) if board_rank else '—' }}</span>
-          <span class="stat-label">leaderboard rank</span>
-        </div>
+    <section class="panel sd-card sd-week">
+      <h2>📅 This week</h2>
+      <div class="sd-kpis">
+        <div><span class="kpi-num">{{ week.answered }}</span><span class="kpi-label">questions answered</span></div>
+        <div><span class="kpi-num">{{ week.correct }}</span><span class="kpi-label">correct</span></div>
+        <div><span class="kpi-num">+{{ week.points }}</span><span class="kpi-label">points earned</span></div>
+        <div><span class="kpi-num">{{ week.streak_days }}<small>/{{ week.days_so_far }}</small></span><span class="kpi-label">streak days</span></div>
       </div>
-      {% if not user.username %}
-        <p class="hint">Set a username to get a rank. <a href="{{ url_for('profile_edit') }}">Pick one</a></p>
-      {% elif not board_rank %}
-        <p class="hint">Earn points from Fundamentals or a streak day to get ranked.</p>
+      <p class="hint">{{ week.minutes }} minutes of practice since Monday</p>
+    </section>
+
+    <section class="panel sd-card sd-overall">
+      <h2>🎯 Overall</h2>
+      {% if overall.answered %}
+        <p class="hero-num">{{ overall.percent }}<span class="hero-unit">%</span></p>
+        <div class="meter overall-meter" role="progressbar" aria-label="Overall accuracy" aria-valuemin="0"
+             aria-valuemax="100" aria-valuenow="{{ overall.percent }}"><span style="width: {{ overall.percent }}%"></span></div>
+        <p class="sd-line">{{ overall.correct }} of {{ overall.answered }} answers correct</p>
+      {% else %}
+        <p class="hero-num muted">—</p>
+        <p class="sd-line">Answer your first questions to see your score.</p>
       {% endif %}
-      <a class="button-link" href="{{ url_for('leaderboard') }}">See leaderboard →</a>
     </section>
   </div>
 
-  {{ topic_panel(topics, can_practice=true) }}
-  {{ attempts_panel(attempts, title="Your last 10 answers") }}
+  {# ---------- Row 2: recommendations · accuracy chart ---------- #}
+  <div class="sd-row sd-bottom">
+    <section class="panel sd-card sd-recs">
+      <h2>💡 Practice next</h2>
+      {% if recommended %}
+        <p class="hint">Your {{ 'top ' ~ recommended|length if recommended|length > 1 else 'top' }} topic{{ 's' if recommended|length > 1 }} to work on, based on your answers so far.</p>
+        <ol class="rec-list">
+          {% for t in recommended %}
+            {% set fkey = fundamentals_topic(t.topic) %}
+            {% set akey = ai_topic_key(t.topic) %}
+            <li>
+              {% if fkey or akey %}
+                <form method="post" action="{{ url_for('start_fundamentals') if fkey else url_for('start_topic') }}"
+                      {{ 'data-ai-form' if not fkey }}>
+                  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                  <button type="submit" name="topic" value="{{ t.topic if fkey else akey }}" class="rec-item">
+              {% else %}
+                <a class="rec-item" href="{{ url_for('practice') }}">
+              {% endif %}
+                    <span class="rec-rank">{{ loop.index }}</span>
+                    <span class="rec-body">
+                      <span class="rec-name">{{ t.topic }}</span>
+                      <span class="rec-meta">{{ t.accuracy }}% · {{ t.correct }} of {{ t.answered }} right ·
+                        {{ '10 questions, earns points' if fkey else ('5 AI questions' if akey else 'Practice page') }}</span>
+                    </span>
+                    <span class="rec-go">Practice →</span>
+              {% if fkey or akey %}
+                  </button>
+                  {% if not fkey %}<p class="generating hint" role="status" hidden>⏳ Making your questions…</p>{% endif %}
+                </form>
+              {% else %}
+                </a>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% elif chart %}
+        <p class="empty">🌟 Nothing to fix right now: every topic with 3+ answers is perfect. Try a new topic to keep growing!</p>
+        <a class="button-link primary" href="{{ url_for('earn_points') }}">Pick a topic</a>
+      {% else %}
+        <p class="empty">Answer a few questions and we'll suggest what to practice.</p>
+        <a class="button-link primary" href="{{ url_for('earn_points') }}">Start practicing</a>
+      {% endif %}
+    </section>
 
-  <section class="panel">
-    <h2>Your tutor</h2>
-    {% if tutor %}
-      <ul class="people">
-        <li>
-          <div><strong>{{ tutor.name }}</strong><small>{{ tutor.email }}</small></div>
-          {% if tutor.subject %}<span class="tag">{{ tutor.subject }}</span>{% endif %}
-        </li>
-      </ul>
-      <p class="hint">Your tutor can see your progress.</p>
-    {% else %}
-      <p class="empty">You're not linked to a tutor yet.</p>
-      <form method="post" action="{{ url_for('link_tutor') }}" class="inline-form">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-        <input type="text" name="tutor_code" placeholder="Enter tutor code" required maxlength="12"
-               autocomplete="off" autocapitalize="characters" spellcheck="false" class="code-input" aria-label="Tutor code">
-        <button type="submit">Link</button>
-      </form>
-    {% endif %}
-  </section>
+    <section class="panel sd-card sd-chart">
+      <h2>📊 Accuracy by topic</h2>
+      {% if chart %}
+        <p class="hint">Every topic you've answered, best first.{% if rec_names %} <span class="key-swatch"></span> = practice next.{% endif %}</p>
+        <div class="bar-chart" role="list" aria-label="Accuracy by topic">
+          {% for t in chart %}
+            {% set rec = t.topic in rec_names %}
+            <div class="bar-row{{ ' is-rec' if rec }}" role="listitem" tabindex="0"
+                 aria-label="{{ t.topic }}: {{ t.accuracy }}% ({{ t.correct }} of {{ t.answered }} correct){{ ', practice next' if rec }}">
+              <span class="bar-label" title="{{ t.topic }}">{{ t.topic }}</span>
+              <span class="bar-track">
+                <span class="bar" style="width: {{ [t.accuracy, 1]|max }}%"></span>
+                {% if rec %}<span class="bar-value" style="left: calc({{ [t.accuracy, 1]|max }}% + 6px)">{{ t.accuracy }}%</span>{% endif %}
+              </span>
+              <span class="bar-tip" aria-hidden="true">{{ t.topic }}: {{ t.accuracy }}% · {{ t.correct }}/{{ t.answered }} correct</span>
+            </div>
+          {% endfor %}
+          <div class="bar-axis" aria-hidden="true"><span></span><span class="bar-ticks"><span>0%</span><span>50%</span><span>100%</span></span></div>
+        </div>
+        <details class="chart-table">
+          <summary>View as a table</summary>
+          <table class="data-table">
+            <thead><tr><th scope="col">Topic</th><th scope="col" class="num">Correct</th><th scope="col" class="num">Answered</th><th scope="col" class="num">Accuracy</th></tr></thead>
+            <tbody>
+              {% for t in chart %}<tr><td>{{ t.topic }}</td><td class="num">{{ t.correct }}</td><td class="num">{{ t.answered }}</td><td class="num">{{ t.accuracy }}%</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </details>
+      {% else %}
+        <p class="empty">Your chart appears after your first practice round.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ---------- Below: recent answers and tutor (kept, but tucked away) ---------- #}
+  <div class="sd-row sd-extra">
+    <details class="panel sd-card sd-recent">
+      <summary><h2>🕘 Recent answers</h2></summary>
+      {{ attempts_panel(attempts, title="Your last 10 answers") }}
+    </details>
+
+    <section class="panel sd-card">
+      <h2>🧑‍🏫 Your tutor</h2>
+      {% if tutor %}
+        <p class="sd-line"><strong>{{ tutor.name }}</strong>{% if tutor.subject %} · {{ tutor.subject }}{% endif %}</p>
+        <p class="hint">Your tutor can see your progress.</p>
+      {% else %}
+        <p class="empty">You're not linked to a tutor yet.</p>
+        <form method="post" action="{{ url_for('link_tutor') }}" class="inline-form">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="text" name="tutor_code" placeholder="Enter tutor code" required maxlength="12"
+                 autocomplete="off" autocapitalize="characters" spellcheck="false" class="code-input" aria-label="Tutor code">
+          <button type="submit">Link</button>
+        </form>
+      {% endif %}
+    </section>
+  </div>
 {% endif %}
 {% endblock %}
 

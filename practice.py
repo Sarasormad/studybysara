@@ -276,6 +276,8 @@ def practice_status(db, user_id, now):
         # What finishing today would earn, and what tomorrow would earn once today is done.
         "bonus_if_finished": streaks.streak_points(yesterday_streak + 1),
         "tomorrow_bonus": streaks.streak_points(current + 1) if secured else None,
+        # What tomorrow pays if today gets (or already is) secured: the "come back" reward.
+        "next_day_bonus": streaks.streak_points((current if secured else yesterday_streak + 1) + 1),
         "current_streak": current,
         "best_streak": streaks.best_streak(days),
         "week_points": week_points,
@@ -409,3 +411,33 @@ def reported_ids(db, user_id, problem_ids):
     marks = ",".join("?" * len(problem_ids))
     return {r[0] for r in db.execute(f"SELECT problem_id FROM problem_reports WHERE user_id = ? "
                                      f"AND problem_id IN ({marks})", (user_id, *problem_ids))}
+
+
+def week_summary(db, user_id, now):
+    """What the student did this week (Monday 12 AM Pacific to now)."""
+    week_start = streaks.week_start_utc(now)
+    monday = streaks.practice_day(week_start)
+    answered, correct, seconds = db.execute(
+        "SELECT COUNT(*), COALESCE(SUM(is_correct), 0), COALESCE(SUM(time_spent_seconds), 0) "
+        "FROM attempts WHERE user_id = ? AND practice_day >= ?", (user_id, monday.isoformat())).fetchone()
+    points = db.execute("SELECT COALESCE(SUM(points), 0) FROM points_ledger WHERE user_id = ? AND created_at >= ?",
+                        (user_id, to_db(week_start))).fetchone()[0]
+    days = sum(1 for d in qualifying_days(db, user_id) if d >= monday)
+    return {"answered": answered, "correct": correct, "points": points,
+            "minutes": seconds // 60, "streak_days": days,
+            "days_so_far": (streaks.practice_day(now) - monday).days + 1}
+
+
+def overall_accuracy(db, user_id):
+    answered, correct = db.execute("SELECT COUNT(*), COALESCE(SUM(is_correct), 0) FROM attempts WHERE user_id = ?",
+                                   (user_id,)).fetchone()
+    return {"answered": answered, "correct": correct,
+            "percent": round(100 * correct / answered) if answered else None}
+
+
+def recommendations(topics, count=3):
+    """The topics to practice next: lowest accuracy first, among topics with enough answers
+    (WEAK_TOPIC_MIN_ATTEMPTS) that aren't already perfect. `topics` is topic_accuracy()."""
+    candidates = [t for t in topics if t["answered"] >= WEAK_TOPIC_MIN_ATTEMPTS and t["correct"] < t["answered"]]
+    candidates.sort(key=lambda t: (t["correct"] / t["answered"], -t["answered"], t["topic"]))
+    return candidates[:count]

@@ -135,3 +135,71 @@ class DashboardAccess(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StudentDashboardData(unittest.TestCase):
+    """The numbers behind the redesigned student dashboard."""
+
+    def setUp(self):
+        self.db = fresh_db()
+        self.addCleanup(self.db.close)
+        self.kid = make_user(self.db, "Kid", username="kid")
+
+    def test_top_three_recommendations_weakest_first(self):
+        answers(self.db, self.kid, "Fractions", right=1, wrong=3)     # 25%
+        answers(self.db, self.kid, "Decimals", right=2, wrong=2)      # 50%
+        answers(self.db, self.kid, "Percents", right=3, wrong=1)      # 75%
+        answers(self.db, self.kid, "Ratios & proportions", right=2, wrong=1)   # 67% (AI topic)
+        answers(self.db, self.kid, "Exponents", right=4, wrong=0)     # perfect: never recommended
+        answers(self.db, self.kid, "Geometry", right=0, wrong=2)      # only 2 answers: not yet
+        recs = pr.recommendations(pr.topic_accuracy(self.db, self.kid))
+        self.assertEqual([t["topic"] for t in recs], ["Fractions", "Decimals", "Ratios & proportions"])
+
+    def test_overall_accuracy_counts_every_answer(self):
+        self.assertIsNone(pr.overall_accuracy(self.db, self.kid)["percent"])
+        answers(self.db, self.kid, "Fractions", right=3, wrong=1)
+        answer(self.db, self.kid, noon(3), 30, source="topic", topic="Ratios & proportions", correct=False)
+        self.assertEqual(pr.overall_accuracy(self.db, self.kid), {"answered": 5, "correct": 3, "percent": 60})
+
+    def test_week_summary_only_counts_this_week(self):
+        answers(self.db, self.kid, "Fractions", right=2, wrong=1, when=noon(-3))   # last week
+        answers(self.db, self.kid, "Fractions", right=3, wrong=1, when=noon(3))    # Thursday
+        week = pr.week_summary(self.db, self.kid, noon(3) + timedelta(hours=1))
+        self.assertEqual((week["answered"], week["correct"], week["points"]), (4, 3, 30))
+        self.assertEqual(week["days_so_far"], 4)                                   # Mon-Thu
+
+    def test_come_back_tomorrow_reward(self):
+        from tests.helpers import practice_minutes
+        practice_minutes(self.db, self.kid, noon(0), 10)            # day 1 secured (+2)
+        status = pr.practice_status(self.db, self.kid, noon(0) + timedelta(hours=1))
+        self.assertEqual(status["next_day_bonus"], 3)               # tomorrow = day 2
+        status = pr.practice_status(self.db, self.kid, noon(1))     # next day, not done yet
+        self.assertEqual((status["bonus_if_finished"], status["next_day_bonus"]), (3, 4))
+
+
+class StudentDashboardPage(unittest.TestCase):
+    def setUp(self):
+        self.db = fresh_db()
+        self.addCleanup(self.db.close)
+        tutor_app.app.config["TESTING"] = True
+        self.client = tutor_app.app.test_client()
+        self.kid = make_user(self.db, "Kid", username="kid")
+        with self.client.session_transaction() as s:
+            s["user_id"] = self.kid
+
+    def test_layout_and_clickable_recommendations(self):
+        answers(self.db, self.kid, "Fractions", right=1, wrong=3)
+        answers(self.db, self.kid, "Ratios & proportions", right=1, wrong=2)
+        html = self.client.get("/dashboard").get_data(as_text=True)
+        for heading in ("Streak", "This week", "Overall", "Practice next", "Accuracy by topic"):
+            self.assertIn(heading, html)
+        self.assertIn('action="/practice/fundamentals/start"', html)            # Fundamentals topic
+        self.assertIn('value="Fractions"', html)
+        self.assertIn('action="/practice/topic/start"', html)                   # AI topic
+        self.assertIn('value="ratios"', html)
+        self.assertIn("View as a table", html)
+
+    def test_brand_new_student_sees_friendly_empty_states(self):
+        html = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Answer a few questions and we'll suggest", html)
+        self.assertIn("Your chart appears after your first practice round", html)

@@ -783,11 +783,16 @@ def dashboard():
     if user["role"] == "tutor":
         rows = [{"student": s, **pr.student_summary(db, s["id"], now)} for s in students]
         return render_template("dashboard.html", user=user, rows=rows)
+    topics = pr.topic_accuracy(db, user["id"])
+    recommended = pr.recommendations(topics)
+    rec_names = {t["topic"] for t in recommended}
+    chart = sorted(topics, key=lambda t: (-t["correct"] / t["answered"], -t["answered"], t["topic"]))
     return render_template(
         "dashboard.html", user=user, tutor=tutor,
         status=pr.practice_status(db, user["id"], now),
-        board_rank=pr.user_rank(db, None, user["id"]) if user["username"] else None,
-        topics=pr.topic_accuracy(db, user["id"]),
+        week=pr.week_summary(db, user["id"], now),
+        overall=pr.overall_accuracy(db, user["id"]),
+        recommended=recommended, rec_names=rec_names, chart=chart,
         attempts=pr.recent_attempts(db, user["id"]),
     )
 

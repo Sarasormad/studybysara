@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Earn more points · TutorConnect{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ url_for('leaderboard') }}">← Leaderboard</a>
+
+<h1 class="earn-title">Earn more points ⭐</h1>
+<p class="sub">Pick a topic. You'll get {{ round_size }} quick questions, worth {{ points }} points for each one you get right.</p>
+
+{# Each tile is its own button: one tap starts the round. Same backend as Fundamentals practice. #}
+<form method="post" action="{{ url_for('start_fundamentals') }}" class="earn-grid">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="back" value="leaderboard">
+
+  <button type="submit" name="topic" value="" class="earn-tile earn-mixed">
+    <span class="earn-icon" aria-hidden="true">🎲</span>
+    <span class="earn-name">Mix of everything</span>
+    <span class="earn-blurb">A little of each topic for {{ current_user.grade_level or 'your level' }}.</span>
+  </button>
+
+  {% for t in topics %}
+    <button type="submit" name="topic" value="{{ t.name }}" class="earn-tile">
+      <span class="earn-icon" aria-hidden="true">{{ t.icon }}</span>
+      <span class="earn-name">{{ t.name }}</span>
+      <span class="earn-blurb">{{ t.blurb }}</span>
+    </button>
+  {% endfor %}
+</form>
+{% endblock %}

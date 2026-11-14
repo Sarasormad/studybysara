@@ -21,10 +21,13 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import ai_practice as ai
+import figurines as figs
+import shop
 import practice as pr          # (the route function below is also called practice)
 import streaks
-from fundamentals import TOPICS, make_round, topic_key
-from config import AI_DAILY_LIMIT, FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
+from fundamentals import (TIER_TOPICS, TOPIC_BLURBS, TOPIC_ICONS, TOPICS, make_round,
+                          tier_for_grade, topic_key)
+from config import AI_DAILY_LIMIT, FUNDAMENTALS_POINTS, FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # STUDYBYSARA_DB lets tests and scripts point the app at a different database file.
@@ -47,7 +50,28 @@ CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+def load_secret_key():
+    """The key that signs session cookies. It must stay the same across restarts, or every
+    restart logs everyone out and breaks open forms. Order: SECRET_KEY env var, else
+    instance/secret_key (created once, git-ignored)."""
+    if os.environ.get("SECRET_KEY"):
+        return os.environ["SECRET_KEY"]
+    path = os.path.join(BASE_DIR, "instance", "secret_key")
+    try:
+        with open(path, encoding="ascii") as f:
+            key = f.read().strip()
+        if key:
+            return key
+    except FileNotFoundError:
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    key = secrets.token_hex(32)
+    with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="ascii") as f:
+        f.write(key)
+    return key
+
+
+app.config["SECRET_KEY"] = load_secret_key()
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024  # Flask rejects bigger requests
 
 
@@ -113,6 +137,7 @@ def init_db():
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username COLLATE NOCASE)")
         # Practice tables (problem_sets, problems, attempts, points_ledger): see practice.py.
         db.executescript(pr.SCHEMA)
+        db.executescript(shop.SCHEMA)          # figurine purchases
         # Give a code to any tutor who signed up before codes existed.
         for (tutor_id,) in db.execute(
             "SELECT id FROM users WHERE role = 'tutor' AND tutor_code IS NULL"
@@ -199,7 +224,11 @@ def check_csrf():
     if request.method == "POST":
         token = request.form.get("_csrf", "")
         if not token or not secrets.compare_digest(token, session.get("_csrf", "")):
-            abort(400, "Invalid form token. Please reload the page and try again.")
+            # Usually an old tab or an expired session, not an attack: nothing is changed,
+            # and the student is sent back with a message instead of an error page.
+            flash("That page had expired, so nothing was changed. Please try again.", "error")
+            back = request.referrer if (request.referrer or "").startswith(request.host_url) else None
+            return redirect(back or url_for("index"))
 
 
 # ---------- Auth helpers ----------
@@ -249,6 +278,15 @@ def local_time(moment, fmt="%b %-d, %-I:%M %p"):
 
 # Lets templates ask "is this a Fundamentals topic?" for the "Practice this" button.
 app.jinja_env.globals["fundamentals_topic"] = topic_key
+app.jinja_env.globals["figurine_svg"] = figs.render
+
+
+@app.template_filter("nice_date")
+def nice_date(iso_day):
+    """'2026-12-01' -> 'Dec 1'."""
+    from datetime import date
+    return date.fromisoformat(iso_day).strftime("%b %-d")
+app.jinja_env.globals["rarities"] = figs.RARITIES
 app.jinja_env.globals["ai_topic_key"] = lambda name: ai.TOPIC_KEY_BY_NAME.get(name)
 SOURCE_LABELS = {"fundamentals": "Fundamentals", "topic": "Topic practice", "photo": "Photo practice"}
 app.jinja_env.globals["source_labels"] = SOURCE_LABELS
@@ -404,8 +442,13 @@ def linked_people(user):
 @app.route("/home")
 @login_required
 def home():
-    students, tutor = linked_people(current_user())
-    return render_template("home.html", students=students, tutor=tutor)
+    user = current_user()
+    students, tutor = linked_people(user)
+    goal = wallet = None
+    if user["role"] == "student":
+        db = get_db()
+        goal, wallet = shop.next_goal(db, user["id"], pr.utcnow()), shop.balance(db, user["id"])
+    return render_template("home.html", students=students, tutor=tutor, goal=goal, wallet=wallet)
 
 
 @app.route("/profile")
@@ -584,13 +627,17 @@ def start_fundamentals():
     """Start a mixed round, or a focused one when the form sends a topic ("Practice this")."""
     user, db = current_user(), get_db()
     focus = topic_key(request.form.get("topic"))
+    set_id = None
     if not focus:
         existing = pr.unfinished_set(db, user["id"], "fundamentals")
         if existing:                                # finish the current mixed round first
-            return redirect(url_for("practice_set", set_id=existing["id"]))
-    problems = make_round(user["grade_level"], size=FUNDAMENTALS_ROUND_SIZE, focus=focus)
-    set_id = pr.create_set(db, user["id"], "fundamentals", problems, pr.utcnow(),
-                           topic=TOPICS[focus] if focus else "Fundamentals", grade_level=user["grade_level"])
+            set_id = existing["id"]
+    if set_id is None:
+        problems = make_round(user["grade_level"], size=FUNDAMENTALS_ROUND_SIZE, focus=focus)
+        set_id = pr.create_set(db, user["id"], "fundamentals", problems, pr.utcnow(),
+                               topic=TOPICS[focus] if focus else "Fundamentals", grade_level=user["grade_level"])
+    if request.form.get("back") == "leaderboard":   # started from "Earn more points!"
+        session["leaderboard_sets"] = (session.get("leaderboard_sets", []) + [set_id])[-20:]
     return redirect(url_for("practice_set", set_id=set_id))
 
 
@@ -607,7 +654,10 @@ def practice_set(set_id):
     status = pr.practice_status(db, user["id"], pr.utcnow())
     total = len(rows)
     reported = pr.reported_ids(db, user["id"], [r["id"] for r in rows])
-    page = {"pset": pset, "reported": reported, "report_reasons": pr.REPORT_REASONS}
+    from_board = set_id in session.get("leaderboard_sets", [])
+    page = {"pset": pset, "reported": reported, "report_reasons": pr.REPORT_REASONS,
+            "back_url": url_for("leaderboard") if from_board else url_for("practice"),
+            "back_label": "Leaderboard" if from_board else "Practice"}
 
     answered_id = request.args.get("answered", type=int)
     if answered_id:
@@ -655,12 +705,74 @@ def answer_problem(problem_id):
 @app.route("/leaderboard")
 @login_required
 def leaderboard():
+    """All-time leaderboard (usernames only)."""
     user, db = current_user(), get_db()
-    tab = "all" if request.args.get("tab") == "all" else "week"
-    since = streaks.week_start_utc(pr.utcnow()) if tab == "week" else None
     is_student = user["role"] == "student"
-    rows, me = pr.leaderboard(db, since, viewer_id=user["id"] if is_student else None)
-    return render_template("leaderboard.html", tab=tab, rows=rows, me=me, is_student=is_student)
+    rows, me = pr.leaderboard(db, None, viewer_id=user["id"] if is_student else None)
+    return render_template("leaderboard.html", rows=rows, me=me, is_student=is_student)
+
+
+@app.route("/leaderboard/earn")
+@student_required
+def earn_points():
+    """Quick pick: choose a Fundamentals topic and jump straight into a 10-question round."""
+    user = current_user()
+    keys = TIER_TOPICS[tier_for_grade(user["grade_level"])]
+    topics = [{"key": k, "name": TOPICS[k], "blurb": TOPIC_BLURBS[k], "icon": TOPIC_ICONS[k]} for k in keys]
+    return render_template("earn_points.html", topics=topics, round_size=FUNDAMENTALS_ROUND_SIZE,
+                           points=FUNDAMENTALS_POINTS)
+
+
+# ---------- Figurine shop ----------
+@app.route("/shop")
+@student_required
+def shop_page():
+    user, db, now = current_user(), get_db(), pr.utcnow()
+    items = shop.shop_items(db, user["id"], now)
+    limited = [i for i in items if i["fig"]["rarity"] == "limited" and i["status"] in ("available", "upcoming", "sold_out")]
+    regular = [i for i in items if i["fig"]["rarity"] != "limited"]
+    sections = [(r, [i for i in regular if i["fig"]["rarity"] == r]) for r in ("common", "rare", "epic", "legendary")]
+    collectable = [i for i in items if i["fig"]["rarity"] != "limited" or i["owned"] or i["status"] != "retired"]
+    return render_template("shop.html", limited=limited, sections=sections,
+                           wallet=shop.balance(db, user["id"]), earned=shop.points_earned(db, user["id"]),
+                           owned_count=sum(1 for i in items if i["owned"]), total=len(collectable))
+
+
+@app.route("/shop/buy/<figurine_id>", methods=["POST"])
+@student_required
+def buy_figurine(figurine_id):
+    user, db = current_user(), get_db()
+    try:
+        shop.buy(db, user["id"], figurine_id, pr.utcnow())
+    except shop.ShopError as e:
+        flash(str(e), "error")
+        return redirect(url_for("shop_page"))
+    return redirect(url_for("figurine_page", figurine_id=figurine_id, new=1))
+
+
+@app.route("/collection")
+@student_required
+def collection():
+    user, db, now = current_user(), get_db(), pr.utcnow()
+    items = shop.shop_items(db, user["id"], now)
+    # Retired limited editions only show up if you own one.
+    items = [i for i in items if i["owned"] or not (i["fig"]["rarity"] == "limited" and i["status"] == "retired")]
+    items.sort(key=lambda i: (i["owned"] is None, figs.RARITIES[i["fig"]["rarity"]]["order"], i["fig"]["price"]))
+    return render_template("collection.html", items=items, owned_count=sum(1 for i in items if i["owned"]),
+                           wallet=shop.balance(db, user["id"]))
+
+
+@app.route("/collection/<figurine_id>")
+@student_required
+def figurine_page(figurine_id):
+    """One figurine you own, big. ?new=1 shows the "you got it!" celebration after buying."""
+    user, db = current_user(), get_db()
+    fig = figs.BY_ID.get(figurine_id)
+    purchase = shop.owned(db, user["id"]).get(figurine_id) if fig else None
+    if purchase is None:
+        return redirect(url_for("shop_page"))
+    return render_template("figurine.html", fig=fig, purchase=purchase, is_new=request.args.get("new") == "1",
+                           wallet=shop.balance(db, user["id"]))
 
 
 @app.route("/dashboard")
@@ -674,7 +786,7 @@ def dashboard():
     return render_template(
         "dashboard.html", user=user, tutor=tutor,
         status=pr.practice_status(db, user["id"], now),
-        week_rank=pr.user_rank(db, streaks.week_start_utc(now), user["id"]) if user["username"] else None,
+        board_rank=pr.user_rank(db, None, user["id"]) if user["username"] else None,
         topics=pr.topic_accuracy(db, user["id"]),
         attempts=pr.recent_attempts(db, user["id"]),
     )

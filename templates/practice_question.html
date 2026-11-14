@@ -31,7 +31,7 @@
 
 {% block content %}
 <div class="practice-top">
-  <a class="back-link" href="{{ url_for('practice') }}">← Practice</a>
+  <a class="back-link" href="{{ back_url }}">← {{ back_label }}</a>
   {{ today_progress(status, compact=true) }}
 </div>
 

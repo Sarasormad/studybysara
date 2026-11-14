@@ -74,8 +74,9 @@ class PracticeRoutes(unittest.TestCase):
         self.signup_student()
         self.client.post("/practice/fundamentals/start", data={"_csrf": self.csrf()})
         pid = self.db.execute("SELECT id FROM problems LIMIT 1").fetchone()[0]
-        resp = self.client.post(f"/practice/problem/{pid}/answer", data={"answer": "1"})
-        self.assertEqual(resp.status_code, 400)
+        resp = self.client.post(f"/practice/problem/{pid}/answer", data={"answer": "1"}, follow_redirects=True)
+        self.assertIn("nothing was changed", resp.get_data(as_text=True))
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM attempts").fetchone()[0], 0)
 
     def test_students_cannot_open_each_others_sets(self):
         self.signup_student("first_kid")

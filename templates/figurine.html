@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_shop.html" import rarity_pill %}
+{% block title %}{{ fig.name }} · TutorConnect{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ url_for('collection') }}">← My collection</a>
+
+<section class="panel reveal {{ 'is-new' if is_new }} reveal-{{ fig.rarity }}">
+  {% if is_new %}
+    <p class="reveal-banner" role="status">🎉 You got {{ fig.name }}!</p>
+  {% endif %}
+  <div class="reveal-art">{{ figurine_svg(fig, 240, serial=purchase.serial) }}</div>
+  {{ rarity_pill(fig.rarity) }}
+  <h1>{{ fig.name }}</h1>
+  <p class="fig-bio">{{ fig.bio }}</p>
+  <p class="serial">
+    Copy <b>No. {{ purchase.serial }}</b>
+    {%- if fig.limited %} of only {{ fig.limited.stock }}{% endif %}
+    · collected {{ purchase.created_at|local_time("%b %-d, %Y") }}
+  </p>
+  <div class="form-actions reveal-actions">
+    <a class="button-link primary" href="{{ url_for('shop_page') }}">Back to the shop</a>
+    <a class="button-link" href="{{ url_for('earn_points') }}">Earn more points</a>
+  </div>
+  <p class="hint">⭐ {{ wallet }} points left to spend</p>
+</section>
+{% endblock %}

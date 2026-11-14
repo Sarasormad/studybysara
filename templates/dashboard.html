@@ -76,17 +76,17 @@
     </section>
 
     <section class="panel">
-      <h2>This week</h2>
+      <h2>Points</h2>
       <div class="stat-row">
-        <div class="stat"><span class="stat-value">{{ status.week_points }}</span><span class="stat-label">points</span></div>
+        <div class="stat"><span class="stat-value">{{ status.total_points }}</span><span class="stat-label">total points</span></div>
         <div class="stat">
-          <span class="stat-value">{{ ('#' ~ week_rank) if week_rank else '—' }}</span>
-          <span class="stat-label">rank</span>
+          <span class="stat-value">{{ ('#' ~ board_rank) if board_rank else '—' }}</span>
+          <span class="stat-label">leaderboard rank</span>
         </div>
       </div>
       {% if not user.username %}
         <p class="hint">Set a username to get a rank. <a href="{{ url_for('profile_edit') }}">Pick one</a></p>
-      {% elif not week_rank %}
+      {% elif not board_rank %}
         <p class="hint">Earn points from Fundamentals or a streak day to get ranked.</p>
       {% endif %}
       <a class="button-link" href="{{ url_for('leaderboard') }}">See leaderboard →</a>

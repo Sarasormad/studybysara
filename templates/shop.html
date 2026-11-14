@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_shop.html" import shop_card %}
+{% block title %}Figurine Shop · TutorConnect{% endblock %}
+{% block content %}
+<div class="shop-head">
+  <div>
+    <h1>Figurine Shop</h1>
+    <p class="sub">Spend your points on collectible characters. Spending never lowers your leaderboard rank.</p>
+  </div>
+  <div class="wallet" aria-label="Points to spend">
+    <span class="wallet-coins">⭐ {{ wallet }}</span>
+    <span class="wallet-label">points to spend</span>
+  </div>
+</div>
+
+<div class="shop-bar">
+  <a class="button-link" href="{{ url_for('collection') }}">🧸 My collection ({{ owned_count }}/{{ total }})</a>
+  <a class="earn-button" href="{{ url_for('earn_points') }}">
+    <span class="earn-text">Earn more points!</span><span class="earn-start">Start</span>
+  </a>
+</div>
+
+{% if limited %}
+  <section class="shop-section limited-section">
+    <h2>✨ Limited Edition</h2>
+    <p class="hint">Only available for a short time, and only a few copies will ever exist. When they're gone, they're gone.</p>
+    <div class="fig-grid">
+      {% for item in limited %}<div id="fig-{{ item.fig.id }}">{{ shop_card(item) }}</div>{% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+{% for rarity, items in sections %}
+  <section class="shop-section">
+    <h2>{{ rarities[rarity].label }}</h2>
+    <div class="fig-grid">
+      {% for item in items %}<div id="fig-{{ item.fig.id }}">{{ shop_card(item) }}</div>{% endfor %}
+    </div>
+  </section>
+{% endfor %}
+{% endblock %}

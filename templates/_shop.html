@@ -1,0 +1,63 @@
+{# Figurine cards shared by the Shop and Collection pages.
+   Import with: {% from "_shop.html" import shop_card, rarity_pill %} #}
+
+{% macro rarity_pill(rarity) -%}
+  <span class="rarity rarity-{{ rarity }}">{{ rarities[rarity].label }}</span>
+{%- endmacro %}
+
+{# `item` comes from shop.shop_items(). mode = "shop" (buy buttons) or "collection" (owned / locked). #}
+{% macro shop_card(item, mode="shop") -%}
+  {% set fig = item.fig %}
+  {% set locked = mode == "collection" and not item.owned %}
+  <article class="fig-card fig-card-{{ fig.rarity }}{{ ' is-owned' if item.owned }}{{ ' is-locked' if locked }}">
+    {% if item.owned %}
+      <a href="{{ url_for('figurine_page', figurine_id=fig.id) }}" class="fig-art" aria-label="View {{ fig.name }}">
+        {{ figurine_svg(fig, 140, serial=item.owned.serial) }}</a>
+    {% else %}
+      <div class="fig-art{{ ' fig-locked' if locked or item.status == 'upcoming' }}">{{ figurine_svg(fig, 140) }}</div>
+    {% endif %}
+
+    <div class="fig-info">
+      {{ rarity_pill(fig.rarity) }}
+      <h3>{{ fig.name }}</h3>
+      {% if mode == "shop" %}<p class="fig-bio">{{ fig.bio }}</p>{% endif %}
+
+      {% if item.stock %}
+        <div class="stock">
+          {% if item.status == 'upcoming' %}
+            <span>📅 Arrives {{ item.starts|nice_date }} · only {{ item.stock }} will exist</span>
+          {% elif item.status == 'sold_out' %}
+            <span>All {{ item.stock }} claimed</span>
+          {% elif item.status == 'retired' %}
+            <span>Retired limited edition</span>
+          {% else %}
+            <span>⏳ {{ item.days_left }} day{{ '' if item.days_left == 1 else 's' }} left · <b>{{ item.left }} of {{ item.stock }}</b> left</span>
+            <div class="meter stock-meter"><span style="width: {{ (100 * item.left / item.stock) | round | int }}%"></span></div>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="fig-action">
+      {% if item.owned %}
+        <span class="owned-tag">✓ Owned · No. {{ item.owned.serial }}</span>
+      {% elif mode == "collection" %}
+        <span class="price">⭐ {{ fig.price }}</span>
+        {% if item.status == 'available' %}<a class="button-link small-link" href="{{ url_for('shop_page') }}#fig-{{ fig.id }}">In the shop</a>{% endif %}
+      {% elif item.status == 'upcoming' %}
+        <span class="price">⭐ {{ fig.price }}</span><span class="soon-tag">Coming soon</span>
+      {% elif item.status == 'sold_out' %}
+        <span class="price">⭐ {{ fig.price }}</span><span class="soon-tag">Sold out</span>
+      {% elif item.can_buy %}
+        <form method="post" action="{{ url_for('buy_figurine', figurine_id=fig.id) }}"
+              data-confirm="Buy {{ fig.name }} for {{ fig.price }} points?">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button type="submit" class="buy-btn">Buy · ⭐ {{ fig.price }}</button>
+        </form>
+      {% else %}
+        <button type="button" class="buy-btn" disabled>⭐ {{ fig.price }}</button>
+        <a class="need-more" href="{{ url_for('earn_points') }}">Need {{ item.short_by }} more → earn</a>
+      {% endif %}
+    </div>
+  </article>
+{%- endmacro %}

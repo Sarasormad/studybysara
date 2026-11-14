@@ -21,6 +21,21 @@ TOPICS = {
     "negatives": "Negative numbers",
 }
 
+# Short descriptions and icons for the "Earn more points!" topic picker.
+TOPIC_BLURBS = {
+    "integers": "Add, subtract, multiply and divide whole numbers.",
+    "order": "Parentheses, exponents, then × ÷ and + − in the right order.",
+    "fractions": "Add, subtract, multiply and divide fractions.",
+    "decimals": "Line up decimal points and multiply decimals.",
+    "percents": "Find a percent of a number, or what percent one number is of another.",
+    "exponents": "Squares, cubes, powers of 2 and exponent rules.",
+    "negatives": "Adding, subtracting, multiplying and dividing negative numbers.",
+}
+TOPIC_ICONS = {
+    "integers": "🔢", "order": "🧩", "fractions": "🍕", "decimals": "🎯",
+    "percents": "💯", "exponents": "🚀", "negatives": "🌡️",
+}
+
 # Which topics each tier practices.
 TIER_TOPICS = {
     0: ["integers"],

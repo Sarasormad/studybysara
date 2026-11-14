@@ -25,13 +25,15 @@
     ('practice',  'Practice Problems'),
     ('leaderboard', 'Leaderboard'),
   ] %}
+  {% if current_user.role == 'student' %}{% set nav = nav + [('shop_page', 'Shop')] %}{% endif %}
+  {% set nav_groups = {'leaderboard': ['earn_points'], 'shop_page': ['buy_figurine', 'collection', 'figurine_page']} %}
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="{{ url_for('home') }}">📚 TutorConnect</a>
       <nav aria-label="Main">
         {% for endpoint, label in nav %}
           <a href="{{ url_for(endpoint) }}"
-             {% if request.endpoint == endpoint or request.endpoint == endpoint ~ '_edit' %}aria-current="page"{% endif %}
+             {% if request.endpoint in [endpoint, endpoint ~ '_edit'] + nav_groups.get(endpoint, []) %}aria-current="page"{% endif %}
              {% if endpoint == 'profile' %}class="nav-profile"{% endif %}>
             {%- if endpoint == 'profile' %}{{ avatar(current_user, 24) }}{% endif %}{{ label -}}
           </a>
@@ -57,6 +59,11 @@
 {% endif %}
 
 <script>
+  // Forms with data-confirm ask "are you sure?" first (used for spending points).
+  document.querySelectorAll("form[data-confirm]").forEach((form) => {
+    form.addEventListener("submit", (e) => { if (!confirm(form.dataset.confirm)) e.preventDefault(); });
+  });
+
   // Forms that ask the AI for questions: show progress and stop double-clicks while the server works.
   document.querySelectorAll("[data-ai-form]").forEach((form) => {
     form.addEventListener("submit", (e) => {

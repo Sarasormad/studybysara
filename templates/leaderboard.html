@@ -1,8 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Leaderboard · TutorConnect{% endblock %}
 {% block content %}
-<h1>Leaderboard</h1>
-<p class="sub">Points from Fundamentals answers and daily streaks. Only usernames are shown.</p>
+<div class="board-head">
+  <div>
+    <h1>Leaderboard</h1>
+    <p class="sub">All-time points from Fundamentals answers and daily streaks. Only usernames are shown.</p>
+  </div>
+  {% if is_student %}
+    <a class="earn-button" href="{{ url_for('earn_points') }}">
+      <span class="earn-text">Earn more points!</span>
+      <span class="earn-start">Start</span>
+    </a>
+  {% endif %}
+</div>
 
 {% if is_student and not current_user.username %}
   <div class="callout">
@@ -10,12 +20,6 @@
     <a class="button-link primary" href="{{ url_for('profile_edit') }}">Pick a username</a>
   </div>
 {% endif %}
-
-<nav class="tabs" aria-label="Leaderboard period">
-  <a href="{{ url_for('leaderboard', tab='week') }}" {% if tab == 'week' %}aria-current="page"{% endif %}>This Week</a>
-  <a href="{{ url_for('leaderboard', tab='all') }}" {% if tab == 'all' %}aria-current="page"{% endif %}>All Time</a>
-</nav>
-{% if tab == 'week' %}<p class="hint tab-hint">Resets every Monday at 12:00 AM (Pacific).</p>{% endif %}
 
 <section class="panel board-panel">
   {% if rows %}
@@ -40,12 +44,12 @@
       </tbody>
     </table>
   {% else %}
-    <p class="empty">No points yet {{ 'this week' if tab == 'week' else '' }}. Be the first: start a Fundamentals round!</p>
+    <p class="empty">No points yet.{% if is_student %} Be the first: hit "Earn more points!"{% endif %}</p>
   {% endif %}
 
   {% if is_student and current_user.username and not me and not (rows | selectattr('is_me') | list) %}
-    <p class="hint board-hint">You're not on the board {{ 'this week' if tab == 'week' else 'yet' }}.
-      Answer Fundamentals questions or secure a streak day to earn points.</p>
+    <p class="hint board-hint">You're not on the board yet. Answer Fundamentals questions or secure a
+      streak day to earn points.</p>
   {% endif %}
 </section>
 {% endblock %}

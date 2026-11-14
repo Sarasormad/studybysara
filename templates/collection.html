@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_shop.html" import shop_card %}
+{% block title %}My Collection · TutorConnect{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ url_for('shop_page') }}">← Shop</a>
+<h1 class="earn-title">My Collection</h1>
+<p class="sub">{{ owned_count }} of {{ items|length }} collected · ⭐ {{ wallet }} points to spend</p>
+<div class="meter collection-meter" role="progressbar" aria-label="Collection progress"
+     aria-valuemin="0" aria-valuemax="{{ items|length }}" aria-valuenow="{{ owned_count }}">
+  <span style="width: {{ (100 * owned_count / (items|length or 1)) | round | int }}%"></span>
+</div>
+
+{% if owned_count == 0 %}
+  <div class="callout">
+    <span>Your shelf is empty! Earn points in Fundamentals, then pick your first figurine.</span>
+    <a class="button-link primary" href="{{ url_for('shop_page') }}">Visit the shop</a>
+  </div>
+{% endif %}
+
+<div class="fig-grid">
+  {% for item in items %}{{ shop_card(item, mode="collection") }}{% endfor %}
+</div>
+{% endblock %}

@@ -30,6 +30,23 @@
   {% endif %}
 </section>
 
+{% if current_user.role == 'student' and goal %}
+  <a class="goal-card" href="{{ url_for('shop_page') }}#fig-{{ goal.fig.id }}">
+    <div class="goal-art">{{ figurine_svg(goal.fig, 72) }}</div>
+    <div class="goal-text">
+      {% if goal.can_buy %}
+        <strong>You can get {{ goal.fig.name }} now!</strong>
+        <span>⭐ {{ wallet }} points to spend · {{ goal.fig.name }} costs {{ goal.fig.price }}</span>
+      {% else %}
+        <strong>{{ goal.short_by }} more points to unlock {{ goal.fig.name }}</strong>
+        <span>⭐ {{ wallet }} of {{ goal.fig.price }} · about {{ ((goal.short_by + 69) // 70) }} Fundamentals round{{ '' if (goal.short_by + 69) // 70 == 1 else 's' }}</span>
+        <span class="meter goal-meter"><span style="width: {{ (100 * wallet / goal.fig.price) | round | int }}%"></span></span>
+      {% endif %}
+    </div>
+    <span class="goal-go">Shop →</span>
+  </a>
+{% endif %}
+
 <div class="tiles">
   <a class="tile" href="{{ url_for('practice') }}">
     <span class="tile-icon" aria-hidden="true">✏️</span>

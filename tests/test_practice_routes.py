@@ -67,8 +67,9 @@ class PracticeRoutes(unittest.TestCase):
             answer = p["correct_answer"] if i % 2 == 0 else wrong
             self.client.post(f"/practice/problem/{p['id']}/answer", data={"_csrf": self.csrf(), "answer": answer})
         html = self.client.get(f"/practice/set/{set_id}").get_data(as_text=True)
-        self.assertIn("Round complete", html)
-        self.assertIn("+50", html)                                    # 5 correct x 10 points
+        self.assertIn("<strong>5</strong> of 10 correct", html)
+        self.assertIn('data-countup="50"', html)                      # 5 correct x 10 points
+        self.assertIn('aria-label="1 of 3 stars"', html)              # 50% = 1 star
 
     def test_answer_without_csrf_token_is_rejected(self):
         self.signup_student()

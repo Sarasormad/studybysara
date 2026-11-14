@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}TutorConnect{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⭐</text></svg>">
 </head>
 <body class="{{ 'app-layout' if current_user else 'auth-layout' }}">
 
@@ -38,6 +39,11 @@
             {%- if endpoint == 'profile' %}{{ avatar(current_user, 24) }}{% endif %}{{ label -}}
           </a>
         {% endfor %}
+        {% if header_wallet is not none %}
+          <a class="wallet-pill" href="{{ url_for('shop_page') }}" title="Points to spend in the Shop">
+            ⭐ <span data-wallet-value>{{ header_wallet }}</span></a>
+        {% endif %}
+        <button type="button" class="sound-toggle" data-sound-toggle aria-pressed="false" hidden>🔇</button>
         <form method="post" action="{{ url_for('logout') }}">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <button type="submit" class="nav-logout">Log out</button>
@@ -75,6 +81,7 @@
     });
   });
 </script>
+<script src="{{ url_for('static', filename='game.js') }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

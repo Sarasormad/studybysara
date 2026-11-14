@@ -2,32 +2,7 @@
 {% from "_macros.html" import today_progress %}
 {% block title %}{{ pset.topic or 'Practice' }} · TutorConnect{% endblock %}
 
-{# "Report a problem" for AI questions: their answer keys can be wrong. #}
-{% macro report_box(problem, back) -%}
-  {% if pset.source != 'fundamentals' %}
-    {% if problem.id in reported %}
-      <p class="hint reported">🚩 Reported. Thanks for helping us fix it.</p>
-    {% else %}
-      <details class="report-box">
-        <summary>🚩 Report a problem</summary>
-        <form method="post" action="{{ url_for('report_problem', problem_id=problem.id) }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <input type="hidden" name="back" value="{{ back }}">
-          <fieldset class="report-reasons">
-            <legend class="visually-hidden">What's wrong?</legend>
-            {% for value, label in report_reasons.items() %}
-              <label class="checkbox"><input type="radio" name="reason" value="{{ value }}" required {{ 'checked' if loop.first }}> {{ label }}</label>
-            {% endfor %}
-          </fieldset>
-          <label><span>Anything else? <span class="optional">(optional)</span></span>
-            <input type="text" name="note" maxlength="500" placeholder="e.g. I think the answer is 12">
-          </label>
-          <button type="submit" class="secondary small">Send report</button>
-        </form>
-      </details>
-    {% endif %}
-  {% endif %}
-{%- endmacro %}
+{% from "_practice.html" import report_box with context %}
 
 {% block content %}
 <div class="practice-top">
@@ -67,45 +42,22 @@
   </section>
 
 {% elif mode == 'feedback' %}
-  <section class="panel question-panel feedback {{ 'is-right' if problem.is_correct else 'is-wrong' }}">
-    <p class="q-meta">Question {{ problem.position }} of {{ total }} · {{ problem.topic }}
-      {%- if pset.source != 'fundamentals' %} · <span class="ai-tag">AI-generated</span>{% endif %}</p>
-    <h2 class="q-text">{{ problem.question_text }}</h2>
-
-    {% if choices %}
-      <ul class="choices choices-review">
-        {% for c in choices %}
-          <li class="choice
-              {{- ' choice-correct' if c == problem.correct_answer }}
-              {{- ' choice-picked' if c == problem.submitted_answer }}">
-            <span>{{ c }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    {% endif %}
-
-    <div class="verdict" role="status">
-      {% if problem.is_correct %}
-        <strong>✅ Correct!</strong>
-        {% if problem.points_awarded %}<span class="points-pill">+{{ problem.points_awarded }} points</span>{% endif %}
-      {% else %}
-        <strong>❌ Not quite.</strong>
-        <span>You answered <b>{{ problem.submitted_answer }}</b>. The answer is <b>{{ problem.correct_answer }}</b>.</span>
-      {% endif %}
-    </div>
-    {% if problem.explanation %}<p class="explanation">{{ problem.explanation }}</p>{% endif %}
-
-    <a class="button-link primary" href="{{ url_for('practice_set', set_id=set_id) }}" autofocus>
-      {{ 'Next question →' if has_next else 'See results →' }}</a>
-    {{ report_box(problem, 'feedback') }}
-  </section>
+  {% include "_feedback.html" %}
 
 {% else %}
-  <section class="panel question-panel summary">
-    <h2>{{ 'Round' if pset.source == 'fundamentals' else 'Set' }} complete! 🎉</h2>
+  <section class="panel question-panel summary stars-{{ stars }}" {{ 'data-confetti' if stars == 3 }} data-sound="complete">
+    <div class="stars" role="img" aria-label="{{ stars }} of 3 stars">
+      {% for i in range(3) %}<span class="star{{ ' on' if i < stars }}" style="--i: {{ i }}">★</span>{% endfor %}
+    </div>
+    <h2 class="summary-title">
+      {%- if stars == 3 %}{{ 'Perfect round!' if correct == total else 'Amazing!' }} 🏆
+      {%- elif stars == 2 %}Great job! 🎉
+      {%- elif stars == 1 %}Nice effort! 💪
+      {%- else %}Round done. Keep going! 🌱{% endif %}</h2>
     <p class="score"><strong>{{ correct }}</strong> of {{ total }} correct
-      {%- if pset.source == 'fundamentals' %} · <strong>+{{ points }}</strong> points
+      {%- if pset.source == 'fundamentals' %} · <strong class="big-points">+<span data-countup="{{ points }}">{{ points }}</span></strong> points
       {%- else %} · counts toward your streak and {{ rows[0].topic }} stats{% endif %}</p>
+    {% if stars < 3 %}<p class="hint">Get {{ ((0.9 * total) | round(0, 'ceil') | int) }} right for 3 stars.</p>{% endif %}
     <ol class="review-list">
       {% for r in rows %}
         <li class="{{ 'is-right' if r.is_correct else 'is-wrong' }}">

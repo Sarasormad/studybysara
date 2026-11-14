@@ -1,0 +1,29 @@
+{# Pieces shared by the question page and the instant feedback panel.
+   Import with: {% from "_practice.html" import report_box with context %} #}
+
+{# "Report a problem" for AI questions: their answer keys can be wrong. #}
+{% macro report_box(problem, back) -%}
+  {% if pset.source != 'fundamentals' %}
+    {% if problem.id in reported %}
+      <p class="hint reported">🚩 Reported. Thanks for helping us fix it.</p>
+    {% else %}
+      <details class="report-box">
+        <summary>🚩 Report a problem</summary>
+        <form method="post" action="{{ url_for('report_problem', problem_id=problem.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="back" value="{{ back }}">
+          <fieldset class="report-reasons">
+            <legend class="visually-hidden">What's wrong?</legend>
+            {% for value, label in report_reasons.items() %}
+              <label class="checkbox"><input type="radio" name="reason" value="{{ value }}" required {{ 'checked' if loop.first }}> {{ label }}</label>
+            {% endfor %}
+          </fieldset>
+          <label><span>Anything else? <span class="optional">(optional)</span></span>
+            <input type="text" name="note" maxlength="500" placeholder="e.g. I think the answer is 12">
+          </label>
+          <button type="submit" class="secondary small">Send report</button>
+        </form>
+      </details>
+    {% endif %}
+  {% endif %}
+{%- endmacro %}

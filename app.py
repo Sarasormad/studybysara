@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 # Variables already set in the terminal win over the file.
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-from flask import (Flask, abort, flash, g, redirect, render_template, request,  # noqa: E402
-                   send_from_directory, session, url_for)
+from flask import (Flask, abort, flash, g, get_template_attribute, jsonify,  # noqa: E402
+                   redirect, render_template, request, send_from_directory, session, url_for)
 from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -295,8 +295,10 @@ app.jinja_env.globals["weak_min"] = WEAK_TOPIC_MIN_ATTEMPTS
 
 @app.context_processor
 def inject_user():
-    """Make `current_user` available in every template (used by the header bar)."""
-    return {"current_user": current_user()}
+    """Make `current_user` (and a student's spendable points) available in every template."""
+    user = current_user()
+    wallet = shop.balance(get_db(), user["id"]) if user and user["role"] == "student" else None
+    return {"current_user": user, "header_wallet": wallet}
 
 
 def login_required(view):
@@ -641,40 +643,81 @@ def start_fundamentals():
     return redirect(url_for("practice_set", set_id=set_id))
 
 
+# Variety in praise feels alive; the wording never pretends a wrong answer was right.
+CHEERS = ["Correct!", "Nailed it!", "You got it!", "Boom! 💥", "Nice work!", "Exactly right!", "Smart! 🧠", "Yes! 🎯"]
+ENCOURAGE = ["Not quite, but you're learning.", "Close! Check the steps below.", "Good try. Here's how it works.",
+             "Almost! Look at the explanation.", "Mistakes help you learn. See why below."]
+
+
+def combo_at(rows, problem_id):
+    """How many answers in a row were correct, ending at this problem (rows are in order)."""
+    count = 0
+    for r in rows:
+        if r["is_correct"] is None:
+            break
+        count = count + 1 if r["is_correct"] else 0
+        if r["id"] == problem_id:
+            return count
+    return 0
+
+
+def stars_for(correct, total):
+    """0-3 stars for a finished set: 40%+ = 1, 70%+ = 2, 90%+ = 3."""
+    share = correct / total if total else 0
+    return 3 if share >= 0.9 else 2 if share >= 0.7 else 1 if share >= 0.4 else 0
+
+
+def feedback_context(rows, done, set_id, total, status, page, streak_message=None):
+    """Everything _feedback.html needs, for the full page and the instant (fetch) version."""
+    return dict(set_id=set_id, total=total, problem=done, status=status,
+                choices=json.loads(done["choices"]) if done["choices"] else None,
+                has_next=any(r["is_correct"] is None for r in rows),
+                combo=combo_at(rows, done["id"]) if done["is_correct"] else 0,
+                cheer=CHEERS[done["id"] % len(CHEERS)], encourage=ENCOURAGE[done["id"] % len(ENCOURAGE)],
+                streak_message=streak_message, **page)
+
+
+def set_page_context(db, user, set_id):
+    """Shared data for a practice set page (or None if it isn't the student's set)."""
+    rows = pr.set_problems(db, user["id"], set_id)
+    if not rows:
+        return None, None
+    pset = db.execute("SELECT * FROM problem_sets WHERE id = ?", (set_id,)).fetchone()
+    from_board = set_id in session.get("leaderboard_sets", [])
+    page = {"pset": pset, "reported": pr.reported_ids(db, user["id"], [r["id"] for r in rows]),
+            "report_reasons": pr.REPORT_REASONS,
+            "back_url": url_for("leaderboard") if from_board else url_for("practice"),
+            "back_label": "Leaderboard" if from_board else "Practice"}
+    return rows, page
+
+
 @app.route("/practice/set/<int:set_id>")
 @student_required
 def practice_set(set_id):
     """Shows the next unanswered question, the feedback for one just answered
     (?answered=<problem id>), or the round summary when everything is answered."""
     user, db = current_user(), get_db()
-    rows = pr.set_problems(db, user["id"], set_id)
-    if not rows:
+    rows, page = set_page_context(db, user, set_id)
+    if rows is None:
         abort(404)
-    pset = db.execute("SELECT * FROM problem_sets WHERE id = ?", (set_id,)).fetchone()
     status = pr.practice_status(db, user["id"], pr.utcnow())
     total = len(rows)
-    reported = pr.reported_ids(db, user["id"], [r["id"] for r in rows])
-    from_board = set_id in session.get("leaderboard_sets", [])
-    page = {"pset": pset, "reported": reported, "report_reasons": pr.REPORT_REASONS,
-            "back_url": url_for("leaderboard") if from_board else url_for("practice"),
-            "back_label": "Leaderboard" if from_board else "Practice"}
 
     answered_id = request.args.get("answered", type=int)
     if answered_id:
         done = next((r for r in rows if r["id"] == answered_id and r["is_correct"] is not None), None)
         if done is None:
             return redirect(url_for("practice_set", set_id=set_id))
-        has_next = any(r["is_correct"] is None for r in rows)
-        return render_template("practice_question.html", mode="feedback", set_id=set_id, total=total,
-                               problem=done, choices=json.loads(done["choices"]) if done["choices"] else None,
-                               has_next=has_next, status=status, **page)
+        return render_template("practice_question.html", mode="feedback",
+                               **feedback_context(rows, done, set_id, total, status, page))
 
     current = next((r for r in rows if r["is_correct"] is None), None)
     if current is None:
         correct = sum(r["is_correct"] for r in rows)
         points = sum(r["points_awarded"] for r in rows)
         return render_template("practice_question.html", mode="summary", set_id=set_id, total=total,
-                               rows=rows, correct=correct, points=points, status=status, **page)
+                               rows=rows, correct=correct, points=points, stars=stars_for(correct, total),
+                               status=status, **page)
 
     pr.mark_served(db, current["id"], pr.utcnow())
     # public_view() strips the answer key: the browser never sees it before submitting.
@@ -690,16 +733,39 @@ def answer_problem(problem_id):
                          (problem_id, user["id"])).fetchone()
     if problem is None:
         abort(404)
+    instant = request.headers.get("X-Requested-With") == "fetch"   # sent by static/game.js
     try:
         result = pr.record_attempt(db, user["id"], problem_id, request.form.get("answer"), pr.utcnow())
     except pr.AnswerError as e:
+        if instant:
+            return jsonify(error=str(e)), 400
         flash(str(e), "error")
         return redirect(url_for("practice_set", set_id=problem["set_id"]))
+    streak_message = None
     if result["streak_bonus"]:
         tomorrow = streaks.streak_points(result["streak_day"] + 1)
-        flash(f"🔥 Streak secured! +{result['streak_bonus']} points. "
-              f"Come back tomorrow for +{tomorrow}.", "success")
-    return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
+        streak_message = (f"🔥 Streak secured! +{result['streak_bonus']} points. "
+                          f"Come back tomorrow for +{tomorrow}.")
+    if not instant:                                    # classic form post (no JavaScript)
+        if streak_message:
+            flash(streak_message, "success")
+        return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
+
+    # Instant feedback: send back the rendered feedback panel and the numbers to animate.
+    set_id = problem["set_id"]
+    rows, page = set_page_context(db, user, set_id)
+    done = next(r for r in rows if r["id"] == problem_id)
+    status = pr.practice_status(db, user["id"], pr.utcnow())
+    ctx = feedback_context(rows, done, set_id, len(rows), status, page, streak_message)
+    today_progress = get_template_attribute("_macros.html", "today_progress")
+    return jsonify(
+        html=render_template("_feedback.html", **ctx),
+        today_html=str(today_progress(status, True)),
+        correct=bool(result["is_correct"]), points=result["points"] + result["streak_bonus"],
+        combo=ctx["combo"], streak_message=streak_message, has_next=ctx["has_next"],
+        feedback_url=url_for("practice_set", set_id=set_id, answered=problem_id),
+        wallet=shop.balance(db, user["id"]),
+    )
 
 
 @app.route("/leaderboard")

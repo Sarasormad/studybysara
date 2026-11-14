@@ -1,0 +1,40 @@
+{# The answer feedback panel. Rendered inside the question page, and on its own for instant
+   feedback (static/game.js swaps it in without reloading). The data-* attributes tell the
+   script what to celebrate. #}
+{% from "_practice.html" import report_box with context %}
+<section class="panel question-panel feedback {{ 'is-right' if problem.is_correct else 'is-wrong' }}"
+         data-correct="{{ 1 if problem.is_correct else 0 }}" data-points="{{ problem.points_awarded }}"
+         data-combo="{{ combo }}">
+  {% if streak_message %}<p class="flash flash-success streak-toast" role="status">{{ streak_message }}</p>{% endif %}
+  <p class="q-meta">Question {{ problem.position }} of {{ total }} · {{ problem.topic }}
+    {%- if pset.source != 'fundamentals' %} · <span class="ai-tag">AI-generated</span>{% endif %}</p>
+  <h2 class="q-text">{{ problem.question_text }}</h2>
+
+  {% if choices %}
+    <ul class="choices choices-review">
+      {% for c in choices %}
+        <li class="choice
+            {{- ' choice-correct' if c == problem.correct_answer }}
+            {{- ' choice-picked' if c == problem.submitted_answer }}">
+          <span>{{ c }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <div class="verdict" role="status">
+    {% if problem.is_correct %}
+      <strong class="verdict-title">✅ {{ cheer }}</strong>
+      {% if problem.points_awarded %}<span class="points-pill">+{{ problem.points_awarded }} points</span>{% endif %}
+      {% if combo >= 2 %}<span class="combo combo-{{ [combo, 5]|min }}">🔥 {{ combo }} in a row!</span>{% endif %}
+    {% else %}
+      <strong class="verdict-title">💡 {{ encourage }}</strong>
+      <span>You answered <b>{{ problem.submitted_answer }}</b>. The answer is <b>{{ problem.correct_answer }}</b>.</span>
+    {% endif %}
+  </div>
+  {% if problem.explanation %}<p class="explanation">{{ problem.explanation }}</p>{% endif %}
+
+  <a class="button-link primary next-btn" href="{{ url_for('practice_set', set_id=set_id) }}" autofocus>
+    {{ 'Next question →' if has_next else 'See results →' }}</a>
+  {{ report_box(problem, 'feedback') }}
+</section>

@@ -67,7 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_attempts_day ON attempts(user_id, practice_day);
 CREATE TABLE IF NOT EXISTS points_ledger (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id      INTEGER NOT NULL REFERENCES users(id),
-    reason       TEXT NOT NULL CHECK (reason IN ('fundamentals', 'streak')),
+    reason       TEXT NOT NULL CHECK (reason IN ('fundamentals', 'streak', 'chest')),
     points       INTEGER NOT NULL,
     attempt_id   INTEGER REFERENCES attempts(id),
     practice_day TEXT NOT NULL,
@@ -78,6 +78,9 @@ CREATE INDEX IF NOT EXISTS idx_ledger_time ON points_ledger(created_at);
 -- At most one streak bonus per student per day, enforced by the database.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_streak_once
     ON points_ledger(user_id, practice_day) WHERE reason = 'streak';
+-- ...and at most one daily-quest chest per student per day.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_chest_once
+    ON points_ledger(user_id, practice_day) WHERE reason = 'chest';
 
 -- Each successful AI question set (topic or photo), for the daily limit.
 CREATE TABLE IF NOT EXISTS ai_generations (
@@ -102,6 +105,35 @@ CREATE TABLE IF NOT EXISTS problem_reports (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_once ON problem_reports(user_id, problem_id);
 """
+
+
+def migrate(db):
+    """One-time upgrades for databases created by older versions. Safe to run every start.
+
+    points_ledger gained the 'chest' reason. SQLite can't change a CHECK rule in place,
+    so the table is rebuilt once with every row copied over (same ids)."""
+    row = db.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'points_ledger'").fetchone()
+    if row and "'chest'" not in row[0]:
+        db.executescript("""
+            BEGIN;
+            ALTER TABLE points_ledger RENAME TO points_ledger_old;
+            DROP INDEX IF EXISTS idx_ledger_user;
+            DROP INDEX IF EXISTS idx_ledger_time;
+            DROP INDEX IF EXISTS idx_ledger_streak_once;
+            CREATE TABLE points_ledger (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL REFERENCES users(id),
+                reason       TEXT NOT NULL CHECK (reason IN ('fundamentals', 'streak', 'chest')),
+                points       INTEGER NOT NULL,
+                attempt_id   INTEGER REFERENCES attempts(id),
+                practice_day TEXT NOT NULL,
+                created_at   TEXT NOT NULL
+            );
+            INSERT INTO points_ledger (id, user_id, reason, points, attempt_id, practice_day, created_at)
+                SELECT id, user_id, reason, points, attempt_id, practice_day, created_at FROM points_ledger_old;
+            DROP TABLE points_ledger_old;
+            COMMIT;
+        """)
 
 
 # ---------- Time helpers (stored as UTC text, like SQLite's CURRENT_TIMESTAMP) ----------

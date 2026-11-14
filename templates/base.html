@@ -39,6 +39,10 @@
             {%- if endpoint == 'profile' %}{{ avatar(current_user, 24) }}{% endif %}{{ label -}}
           </a>
         {% endfor %}
+        {% if header_level %}
+          <span class="level-chip" title="Level {{ header_level.level }} · {{ header_level.to_go }} points to Level {{ header_level.level + 1 }}">
+            Lv {{ header_level.level }}<span class="level-chip-bar"><span style="width: {{ header_level.percent }}%"></span></span></span>
+        {% endif %}
         {% if header_wallet is not none %}
           <a class="wallet-pill" href="{{ url_for('shop_page') }}" title="Points to spend in the Shop">
             ⭐ <span data-wallet-value>{{ header_wallet }}</span></a>

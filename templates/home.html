@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import avatar %}
+{% from "_quests.html" import quests_panel, level_card %}
 {% block title %}Home · TutorConnect{% endblock %}
 {% block content %}
 {% if current_user.role == 'student' and not current_user.username %}
@@ -29,6 +30,13 @@
     </p>
   {% endif %}
 </section>
+
+{% if current_user.role == 'student' %}
+  <div class="home-play">
+    {{ level_card(level) }}
+    {{ quests_panel(quests, chest, chest_points, compact=true) }}
+  </div>
+{% endif %}
 
 {% if current_user.role == 'student' and goal %}
   <a class="goal-card" href="{{ url_for('shop_page') }}#fig-{{ goal.fig.id }}">

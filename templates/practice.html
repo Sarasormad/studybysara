@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import today_progress %}
+{% from "_quests.html" import quests_panel %}
 {% block title %}Practice Problems · TutorConnect{% endblock %}
 
 {% macro topic_buttons(topics) -%}
@@ -19,6 +20,8 @@
   <p class="sub">Practice {{ status.goal_minutes }} minutes a day to keep your streak going.</p>
 
   {{ today_progress(status) }}
+
+  {{ quests_panel(quests, chest, chest_points, opened=chest_opened) }}
 
   <div class="stat-row">
     <div class="stat"><span class="stat-value">{{ status.week_points }}</span><span class="stat-label">points this week</span></div>

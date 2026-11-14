@@ -24,10 +24,11 @@ import ai_practice as ai
 import figurines as figs
 import shop
 import practice as pr          # (the route function below is also called practice)
+import quests as qs
 import streaks
 from fundamentals import (TIER_TOPICS, TOPIC_BLURBS, TOPIC_ICONS, TOPICS, make_round,
                           tier_for_grade, topic_key)
-from config import AI_DAILY_LIMIT, FUNDAMENTALS_POINTS, FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
+from config import AI_DAILY_LIMIT, CHEST_POINTS, FUNDAMENTALS_POINTS, FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # STUDYBYSARA_DB lets tests and scripts point the app at a different database file.
@@ -137,7 +138,10 @@ def init_db():
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username COLLATE NOCASE)")
         # Practice tables (problem_sets, problems, attempts, points_ledger): see practice.py.
         db.executescript(pr.SCHEMA)
+        pr.migrate(db)                         # upgrades for older databases
+        db.executescript(pr.SCHEMA)            # (re)create any indexes the upgrade rebuilt
         db.executescript(shop.SCHEMA)          # figurine purchases
+        db.executescript(qs.SCHEMA)            # daily quests
         # Give a code to any tutor who signed up before codes existed.
         for (tutor_id,) in db.execute(
             "SELECT id FROM users WHERE role = 'tutor' AND tutor_code IS NULL"
@@ -297,8 +301,10 @@ app.jinja_env.globals["weak_min"] = WEAK_TOPIC_MIN_ATTEMPTS
 def inject_user():
     """Make `current_user` (and a student's spendable points) available in every template."""
     user = current_user()
-    wallet = shop.balance(get_db(), user["id"]) if user and user["role"] == "student" else None
-    return {"current_user": user, "header_wallet": wallet}
+    wallet = level = None
+    if user and user["role"] == "student":
+        wallet, level = shop.balance(get_db(), user["id"]), qs.user_level(get_db(), user["id"])
+    return {"current_user": user, "header_wallet": wallet, "header_level": level}
 
 
 def login_required(view):
@@ -446,11 +452,14 @@ def linked_people(user):
 def home():
     user = current_user()
     students, tutor = linked_people(user)
-    goal = wallet = None
+    goal = wallet = quests = chest = level = None
     if user["role"] == "student":
-        db = get_db()
-        goal, wallet = shop.next_goal(db, user["id"], pr.utcnow()), shop.balance(db, user["id"])
-    return render_template("home.html", students=students, tutor=tutor, goal=goal, wallet=wallet)
+        db, now = get_db(), pr.utcnow()
+        goal, wallet = shop.next_goal(db, user["id"], now), shop.balance(db, user["id"])
+        quests = qs.todays_quests(db, user["id"], now)
+        chest, level = qs.chest_state(db, user["id"], now, quests), qs.user_level(db, user["id"])
+    return render_template("home.html", students=students, tutor=tutor, goal=goal, wallet=wallet,
+                           quests=quests, chest=chest, level=level, chest_points=CHEST_POINTS)
 
 
 @app.route("/profile")
@@ -539,7 +548,10 @@ def practice():
            WHERE s.user_id = ? AND s.source != 'fundamentals' AND s.completed_at IS NULL
            GROUP BY s.id ORDER BY s.id DESC LIMIT 3""", (user["id"],)).fetchall()
     fits, others, test_prep = ai.topics_for(user["grade_level"])
+    quests = qs.todays_quests(db, user["id"], now)
     return render_template("practice.html", status=pr.practice_status(db, user["id"], now),
+                           quests=quests, chest=qs.chest_state(db, user["id"], now, quests),
+                           chest_points=CHEST_POINTS, chest_opened=request.args.get("chest") == "opened",
                            unfinished=unfinished, answered=answered, round_size=FUNDAMENTALS_ROUND_SIZE,
                            fits=fits, others=others, test_prep=test_prep, in_progress_ai=in_progress_ai,
                            ai_left=pr.ai_generations_left(db, user["id"], now), ai_limit=AI_DAILY_LIMIT,
@@ -602,6 +614,17 @@ def start_photo():
                            topic=concept, grade_level=user["grade_level"])
     pr.record_ai_generation(db, user["id"], "photo", topic, set_id, now)
     return redirect(url_for("practice_set", set_id=set_id))
+
+
+@app.route("/quests/chest", methods=["POST"])
+@student_required
+def open_chest():
+    """Claim today's reward chest (all 3 daily quests done). Fixed reward, once a day."""
+    user, db = current_user(), get_db()
+    if qs.open_chest(db, user["id"], pr.utcnow()):
+        return redirect(url_for("practice", chest="opened") + "#quests")
+    flash("Finish all 3 of today's quests to open the chest.", "error")
+    return redirect(url_for("practice") + "#quests")
 
 
 @app.route("/practice/problem/<int:problem_id>/report", methods=["POST"])
@@ -734,6 +757,7 @@ def answer_problem(problem_id):
     if problem is None:
         abort(404)
     instant = request.headers.get("X-Requested-With") == "fetch"   # sent by static/game.js
+    before = qs.snapshot(db, user["id"], pr.utcnow())
     try:
         result = pr.record_attempt(db, user["id"], problem_id, request.form.get("answer"), pr.utcnow())
     except pr.AnswerError as e:
@@ -746,9 +770,16 @@ def answer_problem(problem_id):
         tomorrow = streaks.streak_points(result["streak_day"] + 1)
         streak_message = (f"🔥 Streak secured! +{result['streak_bonus']} points. "
                           f"Come back tomorrow for +{tomorrow}.")
+    events = qs.what_changed(before, qs.snapshot(db, user["id"], pr.utcnow()))
     if not instant:                                    # classic form post (no JavaScript)
         if streak_message:
             flash(streak_message, "success")
+        for q in events["quests_done"]:
+            flash(f"{q['icon']} Quest complete: {q['title']}", "success")
+        if events["chest_ready"]:
+            flash("🎁 All quests done! Your chest is ready on the Practice page.", "success")
+        if events["level_up"]:
+            flash(f"🎉 Level up! You reached Level {events['level_up']}.", "success")
         return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
 
     # Instant feedback: send back the rendered feedback panel and the numbers to animate.
@@ -764,6 +795,8 @@ def answer_problem(problem_id):
         correct=bool(result["is_correct"]), points=result["points"] + result["streak_bonus"],
         combo=ctx["combo"], streak_message=streak_message, has_next=ctx["has_next"],
         feedback_url=url_for("practice_set", set_id=set_id, answered=problem_id),
+        quests_done=events["quests_done"], chest_ready=events["chest_ready"], level_up=events["level_up"],
+        chest_url=url_for("practice") + "#quests", level=qs.user_level(db, user["id"]),
         wallet=shop.balance(db, user["id"]),
     )
 

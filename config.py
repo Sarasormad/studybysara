@@ -29,3 +29,8 @@ AI_EFFORT = _os.environ.get("STUDYBYSARA_AI_EFFORT", "medium")   # low | medium 
 AI_DAILY_LIMIT = 20                   # topic + photo generations per student per day
 AI_SET_SIZE = 5                       # questions per AI set
 PHOTO_MAX_SIDE = 1568                 # px; photos are shrunk to this before going to the API
+
+# Levels and daily quests
+LEVEL_STEP = 50                       # points to reach level L = LEVEL_STEP * L * (L - 1): 100, 300, 600, 1000...
+QUESTS_PER_DAY = 3
+CHEST_POINTS = 30                     # fixed reward for finishing all of today's quests (shown up front)

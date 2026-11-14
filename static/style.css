@@ -841,3 +841,109 @@ button.is-checking { opacity: .8; }
   .star { font-size: 2.4rem; }
 }
 .topbar nav a.wallet-pill { color: #92400e; background: #fef3c7; }
+
+/* =====================================================================
+   PHASE B: levels, daily quests, reward chest
+   ===================================================================== */
+/* Header level chip */
+.level-chip { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px 5px;
+  border-radius: 12px; background: rgba(255, 255, 255, 0.18); color: #fff; font-family: var(--font-fun);
+  font-weight: 900; font-size: 0.82rem; line-height: 1; }
+.level-chip-bar { display: block; width: 34px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.35); overflow: hidden; }
+.level-chip-bar span { display: block; height: 100%; background: #fde047; border-radius: inherit; }
+
+/* Home: level + quests side by side */
+.home-play { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 16px; max-width: 960px; margin-bottom: 20px; align-items: stretch; }
+.home-play .panel { max-width: none; margin: 0; }
+.level-card { display: flex; align-items: center; gap: 16px; }
+.level-badge { flex-shrink: 0; width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center;
+  background: conic-gradient(from 210deg, #8b5cf6, #ec4899, #f59e0b, #8b5cf6); box-shadow: 0 6px 18px rgba(139, 92, 246, .35); }
+.level-badge span { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: #fff;
+  font-family: var(--font-fun); font-weight: 900; font-size: 1.7rem; color: var(--accent-deep); }
+.level-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.level-main h2 { margin: 0; }
+.level-meter { height: 10px; }
+.level-meter span { background: linear-gradient(90deg, #8b5cf6, #ec4899); }
+.level-sub { font-size: 0.8rem; color: var(--muted); }
+
+/* Quests panel */
+.quests-panel { margin-bottom: 16px; }
+.quests-head { display: flex; justify-content: space-between; align-items: baseline; }
+.quests-head h2 { margin: 0 0 8px; }
+.quests-count { font-weight: 800; font-size: 0.85rem; color: var(--accent); background: #ede9fe; padding: 2px 10px; border-radius: 999px; }
+.quests-body { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+.quest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.quest { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: #faf9ff; border: 1px solid var(--border); }
+.quest.is-done { background: #f0fdf4; border-color: #bbf7d0; }
+.quest-icon { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #fff; font-size: 0.95rem; }
+.quest.is-done .quest-icon { background: var(--right); color: #fff; font-weight: 900; }
+.quest-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.quest-title { font-weight: 700; font-size: 0.92rem; }
+.quest.is-done .quest-title { color: var(--right); }
+.quest-meter { height: 7px; }
+.quest-meter span { background: linear-gradient(90deg, #8b5cf6, #6366f1); }
+.quest.is-done .quest-meter span { background: var(--right); }
+.quest-num { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 0.85rem; color: var(--muted); min-width: 3.2em; text-align: right; }
+.quest-go button.small { margin: 0; padding: 5px 12px; }
+.quests-compact .quest { padding: 6px 8px; }
+
+/* Chest */
+.chest-box { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; min-width: 150px; }
+.chest-box form { display: block; }
+.chest { overflow: visible; }
+.chest-locked { filter: saturate(.35); opacity: .75; }
+.chest-ready { animation: chest-wiggle 2.4s ease-in-out infinite; transform-origin: 50% 90%; }
+.chest-lid { transform-box: fill-box; transform-origin: 50% 100%; }
+.chest-opened .chest-lid { transform: translateY(-16px) rotate(-10deg); }
+.chest-opened .chest-lock { opacity: 0; }
+.chest-note { margin: 0; display: flex; flex-direction: column; font-size: 0.85rem; }
+.chest-note span { color: var(--muted); font-size: 0.78rem; }
+.chest-won { color: #d97706; font-size: 1.2rem; font-family: var(--font-fun); }
+button.chest-open-btn { margin: 0; padding: 9px 14px; background: linear-gradient(180deg, #fbbf24, #f59e0b);
+  color: #78350f; box-shadow: 0 4px 0 #b45309; }
+button.chest-open-btn:hover:not(:disabled) { background: linear-gradient(180deg, #fcd34d, #fbbf24); box-shadow: 0 5px 0 #b45309; }
+button.chest-open-btn:active:not(:disabled) { box-shadow: 0 1px 0 #b45309; }
+/* The reveal: shake, lid pops, loot rises */
+.chest-reveal .chest-body, .chest-reveal .chest-lid { animation: chest-shake .5s ease-in-out; }
+.chest-reveal .chest-lid { animation: chest-lid-open .55s .45s cubic-bezier(.2, 1.6, .4, 1) both; }
+.chest-reveal .chest-loot { animation: chest-loot-rise .6s .7s cubic-bezier(.2, 1.4, .4, 1) both; }
+.chest-reveal .chest-glow { animation: chest-glow-in .8s .6s both; }
+
+/* Toasts (quest complete, chest ready, level up) */
+.toast-stack { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 120; display: flex;
+  flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: min(92vw, 420px); }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 14px; border-radius: 14px;
+  background: var(--card); border: 2px solid #c4b5fd; box-shadow: 0 10px 30px rgba(91, 63, 245, .25);
+  font-weight: 700; animation: toast-in .45s cubic-bezier(.2, 1.4, .4, 1); }
+.toast.is-leaving { animation: toast-out .3s ease-in forwards; }
+.toast-quest { border-color: #86efac; }
+.toast-chest { border-color: #fcd34d; background: #fffbeb; }
+.toast-level { border-color: transparent; color: #fff; font-size: 1.1rem;
+  background: linear-gradient(90deg, #7c3aed, #db2777); }
+.toast a { color: inherit; font-weight: 900; margin-left: auto; white-space: nowrap; }
+.toast-icon { font-size: 1.4rem; }
+
+@keyframes chest-wiggle { 0%, 70%, 100% { transform: rotate(0); } 75% { transform: rotate(-6deg); } 80% { transform: rotate(6deg); }
+  85% { transform: rotate(-4deg); } 90% { transform: rotate(3deg); } }
+@keyframes chest-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(2deg); } }
+@keyframes chest-lid-open { from { transform: none; } to { transform: translateY(-16px) rotate(-10deg); } }
+@keyframes chest-loot-rise { from { transform: translateY(26px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes chest-glow-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes toast-in { from { transform: translateY(-16px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes toast-out { to { transform: translateY(-10px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .chest-ready, .chest-reveal .chest-body, .chest-reveal .chest-lid, .chest-reveal .chest-loot,
+  .chest-reveal .chest-glow, .toast, .toast.is-leaving { animation: none; }
+}
+@media (max-width: 760px) {
+  .home-play { grid-template-columns: 1fr; }
+  .quests-body { grid-template-columns: 1fr; }
+  .chest-box { flex-direction: row; justify-content: center; min-width: 0; }
+}
+/* Header: room for the level chip, points and sound on one row */
+.topbar-inner { max-width: 1120px; gap: 10px; }
+.topbar nav { gap: 2px; }
+.topbar nav a { padding: 7px 10px; }
+.topbar nav .wallet-pill, .topbar nav .level-chip { margin-left: 4px; }
+.quests-panel, #photo-practice, #topic-practice, [id^="fig-"] { scroll-margin-top: 96px; }   /* clear the sticky header */

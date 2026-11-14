@@ -44,6 +44,8 @@
       combo: [[523, 0, 0.1], [659, 0.08, 0.1], [784, 0.16, 0.1], [1047, 0.24, 0.25]],
       complete: [[523, 0, 0.14], [659, 0.12, 0.14], [784, 0.24, 0.14], [1047, 0.36, 0.4], [1319, 0.36, 0.4, "sine", 0.06]],
       coin: [[1319, 0, 0.08, "square", 0.04], [1760, 0.07, 0.14, "square", 0.04]],
+      quest: [[784, 0, 0.1], [988, 0.09, 0.1], [1175, 0.18, 0.22]],
+      levelup: [[523, 0, 0.12], [659, 0.1, 0.12], [784, 0.2, 0.12], [1047, 0.3, 0.12], [1319, 0.42, 0.5], [1568, 0.42, 0.5, "sine", 0.05]],
     },
     async play(name) {
       if (!this.enabled()) return;
@@ -138,6 +140,37 @@
     countUp(el, old, newValue, 900);
   }
 
+  // Small pop-up messages near the top (quest complete, chest ready, level up).
+  function toast(html, kind = "quest", ms = 3800) {
+    let stack = document.querySelector(".toast-stack");
+    if (!stack) {
+      stack = document.createElement("div");
+      stack.className = "toast-stack";
+      stack.setAttribute("role", "status");
+      stack.setAttribute("aria-live", "polite");
+      document.body.appendChild(stack);
+    }
+    const el = document.createElement("div");
+    el.className = `toast toast-${kind}`;
+    el.innerHTML = html;
+    stack.appendChild(el);
+    setTimeout(() => {
+      el.classList.add("is-leaving");
+      setTimeout(() => el.remove(), reduceMotion ? 0 : 320);
+    }, ms);
+  }
+
+  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function updateLevelChip(level) {
+    const chip = document.querySelector(".level-chip");
+    if (!chip || !level) return;
+    chip.firstChild.textContent = `Lv ${level.level}`;
+    chip.title = `Level ${level.level} · ${level.to_go} points to Level ${level.level + 1}`;
+    const bar = chip.querySelector(".level-chip-bar span");
+    if (bar) bar.style.width = `${level.percent}%`;
+  }
+
   // What to celebrate on a freshly shown feedback panel.
   function celebrate(panel, data) {
     const correct = data.correct;
@@ -159,6 +192,27 @@
       setTimeout(() => Sound.play("complete"), 350);
     }
     updateWallet(data.wallet);
+    updateLevelChip(data.level);
+
+    // Quests, chest and level-ups arrive a beat after the answer, so each moment gets its own spotlight.
+    let delay = 700;
+    (data.quests_done || []).forEach((q) => {
+      setTimeout(() => { toast(`<span class="toast-icon">${escapeHtml(q.icon)}</span> Quest complete: ${escapeHtml(q.title)}`, "quest"); Sound.play("quest"); }, delay);
+      delay += 600;
+    });
+    if (data.chest_ready) {
+      setTimeout(() => {
+        toast(`<span class="toast-icon">🎁</span> All quests done! <a href="${escapeHtml(data.chest_url)}">Open your chest →</a>`, "chest", 6000);
+      }, delay);
+      delay += 600;
+    }
+    if (data.level_up) {
+      setTimeout(() => {
+        toast(`<span class="toast-icon">🎉</span> Level up! You're now Level ${escapeHtml(data.level_up)}`, "level", 5000);
+        confetti(130);
+        Sound.play("levelup");
+      }, delay);
+    }
   }
 
   // ---------------------------------------------------------------- Instant answers
@@ -227,5 +281,5 @@
   setupSoundToggle();
   setupInstantAnswers();
   onLoad();
-  window.StudyBySaraGame = { confetti, floatText, countUp, Sound };   // handy for experimenting in the console
+  window.StudyBySaraGame = { confetti, floatText, countUp, toast, Sound };   // handy for experimenting in the console
 })();

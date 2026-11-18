@@ -129,6 +129,10 @@ class TutorPages(unittest.TestCase):
         self.assertNotIn('href="/shop"', html)
         self.assertNotIn("data-sound-toggle", html)
 
+    def test_every_page_links_back_home(self):
+        for url in ("/dashboard", "/leaderboard", "/profile", f"/dashboard/students/{self.kid}"):
+            self.assertIn('href="/home"', self.page(url).split('class="nav-links"')[1].split("</nav>")[0], url)
+
     def test_tutor_can_edit_name_and_subjects(self):
         self.assertIn('name="subject"', self.page("/profile/edit"))
         resp = self.client.post("/profile/edit", data={"_csrf": self.token(), "name": "Tina T.",

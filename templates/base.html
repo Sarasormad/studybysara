@@ -23,10 +23,10 @@
   {# ---------- Logged-in layout: header bar + page content ---------- #}
   {# Practice and Shop are for students; tutors follow their class from Home and Dashboard. #}
   {% if current_user.role == 'student' %}
-    {% set nav = [('profile', 'Profile'), ('dashboard', 'Dashboard'), ('practice', 'Practice Problems'),
+    {% set nav = [('home', 'Home'), ('profile', 'Profile'), ('dashboard', 'Dashboard'), ('practice', 'Practice Problems'),
                   ('leaderboard', 'Leaderboard'), ('shop_page', 'Shop')] %}
   {% else %}
-    {% set nav = [('profile', 'Profile'), ('dashboard', 'Dashboard'), ('leaderboard', 'Leaderboard')] %}
+    {% set nav = [('home', 'Home'), ('profile', 'Profile'), ('dashboard', 'Dashboard'), ('leaderboard', 'Leaderboard')] %}
   {% endif %}
   {% set nav_groups = {'leaderboard': ['earn_points'], 'shop_page': ['buy_figurine', 'collection', 'figurine_page']} %}
   {# Bottom tab bar (phones and iPad portrait): the main places, with icons. #}

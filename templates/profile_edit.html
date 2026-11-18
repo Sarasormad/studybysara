@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import avatar %}
-{% block title %}Edit profile · TutorConnect{% endblock %}
+{% block title %}Edit profile · NeuLearning{% endblock %}
 {% block content %}
+<div class="narrow">
 <h1>Edit profile</h1>
-<p class="sub">Your username and picture appear on leaderboards and to your tutor.</p>
+<p class="sub">{% if is_tutor %}Your name, subjects and picture are what your students see.{% else %}Your username and picture appear on leaderboards and to your tutor.{% endif %}</p>
 
 <section class="panel">
   {# enctype="multipart/form-data" is required, or the browser won't send the file. #}
@@ -27,14 +28,23 @@
       </div>
     </div>
 
-    <label>Username
-      <input type="text" name="username" value="{{ form.username }}" required
-             minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+"
-             autocomplete="username" spellcheck="false">
-    </label>
-    <p class="hint">3–20 letters, numbers or underscores. Pick something that isn't your real name.</p>
-
-    {# Exercise: add name and grade level fields here (see profile_edit() in app.py). #}
+    {% if is_tutor %}
+      <label>Name
+        <input type="text" name="name" value="{{ form.name }}" required maxlength="80" autocomplete="name">
+      </label>
+      <label>Subjects
+        <input type="text" name="subject" value="{{ form.subject }}" required maxlength="200"
+               placeholder="e.g. Algebra, Geometry, Chemistry">
+      </label>
+      <p class="hint">Separate subjects with commas.</p>
+    {% else %}
+      <label>Username
+        <input type="text" name="username" value="{{ form.username }}" required
+               minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+"
+               autocomplete="username" spellcheck="false">
+      </label>
+      <p class="hint">3–20 letters, numbers or underscores. Pick something that isn't your real name.</p>
+    {% endif %}
 
     <div class="form-actions">
       <button type="submit">Save changes</button>
@@ -42,6 +52,7 @@
     </div>
   </form>
 </section>
+</div>
 {% endblock %}
 
 {% block scripts %}

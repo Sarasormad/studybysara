@@ -34,3 +34,15 @@ PHOTO_MAX_SIDE = 1568                 # px; photos are shrunk to this before goi
 LEVEL_STEP = 50                       # points to reach level L = LEVEL_STEP * L * (L - 1): 100, 300, 600, 1000...
 QUESTS_PER_DAY = 3
 CHEST_POINTS = 30                     # fixed reward for finishing all of today's quests (shown up front)
+
+# Streak shields and healthy stopping points
+SHIELD_EVERY_DAYS = 7                 # earn a streak shield on every 7th real day in a row
+MAX_SHIELDS = 2                       # most shields a student can hold at once
+BREAK_NUDGE_MINUTES = 45              # after this much practice in a day, suggest a break
+
+# Tutor "needs attention" rules
+ATTENTION_INACTIVE_DAYS = 3           # no practice for this many days
+ATTENTION_LOW_ACCURACY = 50           # accuracy below this (%)...
+ATTENTION_MIN_ANSWERS = 10            # ...once the student has at least this many answers
+ATTENTION_STREAK_DAYS = 3             # a streak at least this long that ended in the last week
+CLASS_TOPIC_MIN_ANSWERS = 5           # class-wide answers before a topic can be a class weak spot

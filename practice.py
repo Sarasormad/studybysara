@@ -9,7 +9,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import streaks
-from config import (AI_DAILY_LIMIT, DAILY_GOAL_SECONDS, FUNDAMENTALS_POINTS, LEADERBOARD_SIZE,
+from config import (AI_DAILY_LIMIT, BREAK_NUDGE_MINUTES, DAILY_GOAL_SECONDS, MAX_SHIELDS, SHIELD_EVERY_DAYS, FUNDAMENTALS_POINTS, LEADERBOARD_SIZE,
                     RECENT_ATTEMPTS_SHOWN, STREAK_BONUS_CAP, WEAK_TOPIC_MIN_ATTEMPTS,
                     WEAK_TOPICS_SHOWN)
 from grading import answers_match
@@ -78,6 +78,15 @@ CREATE INDEX IF NOT EXISTS idx_ledger_time ON points_ledger(created_at);
 -- At most one streak bonus per student per day, enforced by the database.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_streak_once
     ON points_ledger(user_id, practice_day) WHERE reason = 'streak';
+-- Streak shields: earned on every 7th real streak day, used up to cover a missed day.
+CREATE TABLE IF NOT EXISTS streak_shields (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    earned_day  TEXT NOT NULL,
+    used_day    TEXT,                -- the missed day it covered (NULL = still held)
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shields_user ON streak_shields(user_id, used_day);
 -- ...and at most one daily-quest chest per student per day.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_chest_once
     ON points_ledger(user_id, practice_day) WHERE reason = 'chest';
@@ -244,7 +253,7 @@ def record_attempt(db, user_id, problem_id, submitted, now):
         db.execute("INSERT INTO points_ledger (user_id, reason, points, attempt_id, practice_day, created_at) "
                    "VALUES (?, 'fundamentals', ?, ?, ?, ?)", (user_id, points, cur.lastrowid, day, to_db(now)))
 
-    bonus, streak_day = award_streak_if_earned(db, user_id, now)
+    bonus, streak_day, shield_earned = award_streak_if_earned(db, user_id, now)
 
     # Close the set when its last question is answered.
     if problem["set_id"]:
@@ -254,7 +263,8 @@ def record_attempt(db, user_id, problem_id, submitted, now):
         if left == 0:
             db.execute("UPDATE problem_sets SET completed_at = ? WHERE id = ?", (to_db(now), problem["set_id"]))
     db.commit()
-    return {"is_correct": is_correct, "points": points, "streak_bonus": bonus, "streak_day": streak_day}
+    return {"is_correct": is_correct, "points": points, "streak_bonus": bonus, "streak_day": streak_day,
+            "shield_earned": shield_earned}
 
 
 # ---------- Streaks ----------
@@ -270,26 +280,64 @@ def qualifying_days(db, user_id):
     return {datetime.strptime(r[0], "%Y-%m-%d").date() for r in rows}
 
 
+def shields_held(db, user_id):
+    return db.execute("SELECT COUNT(*) FROM streak_shields WHERE user_id = ? AND used_day IS NULL",
+                      (user_id,)).fetchone()[0]
+
+
+def shielded_days(db, user_id):
+    """Missed days already covered by a used shield."""
+    return {datetime.strptime(r[0], "%Y-%m-%d").date() for r in db.execute(
+        "SELECT used_day FROM streak_shields WHERE user_id = ? AND used_day IS NOT NULL", (user_id,))}
+
+
+def streak_context(db, user_id, today):
+    """(qualifying days, shielded days, shields held, days a held shield is protecting right now).
+
+    "Protecting" means: the student missed a day or two, has enough shields to cover them,
+    and hasn't secured today yet. The shields are only used up once today is secured."""
+    days, used, held = qualifying_days(db, user_id), shielded_days(db, user_id), shields_held(db, user_id)
+    pending = set() if today in days else streaks.days_a_shield_would_cover(days | used, today, held)
+    return days, used, held, pending
+
+
 def award_streak_if_earned(db, user_id, now):
-    """If today just reached the goal and no bonus was given yet, award it. Returns (points, streak_day)."""
+    """If today just reached the goal and no bonus was given yet, award it (using shields to
+    cover recently missed days, and earning a new shield on every 7th day).
+    Returns (points, streak_day, shield_earned)."""
     today = streaks.practice_day(now)
     if seconds_on_day(db, user_id, today) < DAILY_GOAL_SECONDS:
-        return 0, 0
-    streak_day = streaks.streak_ending(qualifying_days(db, user_id), today)
+        return 0, 0, False
+    if db.execute("SELECT 1 FROM points_ledger WHERE user_id = ? AND reason = 'streak' AND practice_day = ?",
+                  (user_id, today.isoformat())).fetchone():
+        return 0, 0, False                                     # already awarded today
+    days, used, held = qualifying_days(db, user_id), shielded_days(db, user_id), shields_held(db, user_id)
+    for missed in sorted(streaks.days_a_shield_would_cover((days - {today}) | used, today, held)):
+        db.execute("UPDATE streak_shields SET used_day = ? WHERE id = (SELECT id FROM streak_shields "
+                   "WHERE user_id = ? AND used_day IS NULL ORDER BY id LIMIT 1)", (missed.isoformat(), user_id))
+        used.add(missed)
+    streak_day = streaks.streak_ending(days, today, used)
     points = streaks.streak_points(streak_day)
     cur = db.execute(
         "INSERT OR IGNORE INTO points_ledger (user_id, reason, points, practice_day, created_at) "
         "VALUES (?, 'streak', ?, ?, ?)", (user_id, points, today.isoformat(), to_db(now)))
-    return (points, streak_day) if cur.rowcount else (0, 0)
+    if not cur.rowcount:
+        return 0, 0, False
+    shield_earned = streak_day % SHIELD_EVERY_DAYS == 0 and shields_held(db, user_id) < MAX_SHIELDS
+    if shield_earned:
+        db.execute("INSERT INTO streak_shields (user_id, earned_day, created_at) VALUES (?, ?, ?)",
+                   (user_id, today.isoformat(), to_db(now)))
+    return points, streak_day, shield_earned
 
 
 def practice_status(db, user_id, now):
     """Everything the Practice page and dashboard show about today, streaks and points."""
     today = streaks.practice_day(now)
-    days = qualifying_days(db, user_id)
+    days, used, held, protecting = streak_context(db, user_id, today)
+    linked = used | protecting                       # missed days a shield covers (or will cover)
     seconds = seconds_on_day(db, user_id, today)
     secured = today in days
-    yesterday_streak = streaks.streak_ending(days, today - timedelta(days=1))
+    yesterday_streak = streaks.streak_ending(days, today - timedelta(days=1), linked)
     today_bonus = db.execute("SELECT points FROM points_ledger WHERE user_id = ? AND reason = 'streak' "
                              "AND practice_day = ?", (user_id, today.isoformat())).fetchone()
     week_start = to_db(streaks.week_start_utc(now))
@@ -297,9 +345,17 @@ def practice_status(db, user_id, now):
                              "AND created_at >= ?", (user_id, week_start)).fetchone()[0]
     total_points = db.execute("SELECT COALESCE(SUM(points), 0) FROM points_ledger WHERE user_id = ?",
                               (user_id,)).fetchone()[0]
-    current = streaks.current_streak(days, today)
+    current = streaks.current_streak(days, today, linked)
     return {
         "today_seconds": seconds,
+        "minutes_total": seconds // 60,
+        "take_a_break": seconds >= BREAK_NUDGE_MINUTES * 60,
+        "break_minutes": BREAK_NUDGE_MINUTES,
+        "shields": held,
+        "max_shields": MAX_SHIELDS,
+        "shield_protecting": bool(protecting),
+        # Real streak days still needed for the next shield (None when already holding the max).
+        "days_to_shield": (SHIELD_EVERY_DAYS - current % SHIELD_EVERY_DAYS) if held < MAX_SHIELDS else None,
         "today_minutes": min(seconds, DAILY_GOAL_SECONDS) // 60,
         "goal_minutes": DAILY_GOAL_SECONDS // 60,
         "percent": min(100, round(100 * seconds / DAILY_GOAL_SECONDS)),
@@ -311,7 +367,7 @@ def practice_status(db, user_id, now):
         # What tomorrow pays if today gets (or already is) secured: the "come back" reward.
         "next_day_bonus": streaks.streak_points((current if secured else yesterday_streak + 1) + 1),
         "current_streak": current,
-        "best_streak": streaks.best_streak(days),
+        "best_streak": streaks.best_streak(days, used),
         "week_points": week_points,
         "total_points": total_points,
         "bonus_cap": STREAK_BONUS_CAP,
@@ -396,9 +452,10 @@ def student_summary(db, user_id, now):
     weakest = next((t for t in topics if t["weak"]), None)
     return {
         "last_active": from_db(last),
-        "current_streak": streaks.current_streak(qualifying_days(db, user_id), streaks.practice_day(now)),
+        "current_streak": _current_streak(db, user_id, streaks.practice_day(now)),
         "week_answered": week_answered,
         "answered": answered,
+        "correct": correct,
         "accuracy": round(100 * correct / answered) if answered else None,
         "weakest_topic": weakest["topic"] if weakest else None,
     }
@@ -473,3 +530,68 @@ def recommendations(topics, count=3):
     candidates = [t for t in topics if t["answered"] >= WEAK_TOPIC_MIN_ATTEMPTS and t["correct"] < t["answered"]]
     candidates.sort(key=lambda t: (t["correct"] / t["answered"], -t["answered"], t["topic"]))
     return candidates[:count]
+
+
+def _current_streak(db, user_id, today):
+    days, used, _held, protecting = streak_context(db, user_id, today)
+    return streaks.current_streak(days, today, used | protecting)
+
+
+# ---------- Tutor: class overview ----------
+def _lost_streak(db, user_id, today):
+    """Length of a streak that ended in the last 7 days (0 if none, or if one is running)."""
+    days, used, _held, protecting = streak_context(db, user_id, today)
+    linked = used | protecting
+    if streaks.current_streak(days, today, linked):
+        return 0
+    recent = [d for d in days if 0 < (today - d).days <= 7]
+    return streaks.streak_ending(days, max(recent), linked) if recent else 0
+
+
+def class_overview(db, tutor_id, now):
+    """Everything a tutor's Home and Dashboard show about their class."""
+    from config import (ATTENTION_INACTIVE_DAYS, ATTENTION_LOW_ACCURACY, ATTENTION_MIN_ANSWERS,
+                        ATTENTION_STREAK_DAYS, CLASS_TOPIC_MIN_ANSWERS)
+    today = streaks.practice_day(now)
+    students = db.execute("SELECT id, name, email, username, avatar, grade_level FROM users "
+                          "WHERE role = 'student' AND tutor_id = ? ORDER BY name", (tutor_id,)).fetchall()
+    rows, answered_total, correct_total = [], 0, 0
+    for s in students:
+        summary = student_summary(db, s["id"], now)
+        days_idle = (today - streaks.practice_day(summary["last_active"])).days if summary["last_active"] else None
+        reasons = []
+        if days_idle is None:
+            reasons.append("Hasn't practiced yet")
+        elif days_idle >= ATTENTION_INACTIVE_DAYS:
+            reasons.append(f"Inactive for {days_idle} days")
+        if summary["answered"] >= ATTENTION_MIN_ANSWERS and summary["accuracy"] < ATTENTION_LOW_ACCURACY:
+            reasons.append(f"Accuracy is {summary['accuracy']}%")
+        lost = _lost_streak(db, s["id"], today)
+        if lost >= ATTENTION_STREAK_DAYS:
+            reasons.append(f"Lost a {lost}-day streak")
+        answered_total += summary["answered"]
+        correct_total += summary["correct"]
+        rows.append({"student": s, **summary, "days_idle": days_idle, "reasons": reasons})
+
+    weak_topics = []
+    if students:
+        topic_rows = db.execute(
+            f"""SELECT p.topic AS topic, COUNT(*) AS answered, SUM(a.is_correct) AS correct,
+                       COUNT(DISTINCT a.user_id) AS students
+                FROM attempts a JOIN problems p ON p.id = a.problem_id
+                WHERE a.user_id IN ({",".join("?" * len(students))}) AND p.topic IS NOT NULL
+                GROUP BY p.topic HAVING COUNT(*) >= ? AND SUM(a.is_correct) < COUNT(*)""",
+            (*[s["id"] for s in students], CLASS_TOPIC_MIN_ANSWERS)).fetchall()
+        weak_topics = sorted(({"topic": t["topic"], "answered": t["answered"], "students": t["students"],
+                               "accuracy": round(100 * t["correct"] / t["answered"])} for t in topic_rows),
+                             key=lambda t: (t["accuracy"], -t["answered"]))[:3]
+    attention = sorted((r for r in rows if r["reasons"]), key=lambda r: (-len(r["reasons"]), r["student"]["name"]))
+    return {
+        "rows": rows,
+        "count": len(rows),
+        "active_week": sum(1 for r in rows if r["week_answered"] > 0),
+        "accuracy": round(100 * correct_total / answered_total) if answered_total else None,
+        "answered": answered_total,
+        "weak_topics": weak_topics,
+        "attention": attention,
+    }

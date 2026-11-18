@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% from "_macros.html" import avatar %}
 {% from "_quests.html" import quests_panel, level_card %}
-{% block title %}Home · TutorConnect{% endblock %}
+{% from "_class.html" import class_summary, attention_list with context %}
+{% block title %}Home · NeuLearning{% endblock %}
 {% block content %}
 {% if current_user.role == 'student' and not current_user.username %}
   <div class="callout">
@@ -31,6 +32,11 @@
   {% endif %}
 </section>
 
+{% if current_user.role == 'tutor' and overview %}
+  {{ class_summary(overview) }}
+  {{ attention_list(overview) }}
+{% endif %}
+
 {% if current_user.role == 'student' %}
   <div class="home-play">
     {{ level_card(level) }}
@@ -56,18 +62,26 @@
 {% endif %}
 
 <div class="tiles">
-  <a class="tile" href="{{ url_for('practice') }}">
-    <span class="tile-icon" aria-hidden="true">✏️</span>
-    <h2>Practice Problems</h2>
-    <p>{% if current_user.role == 'tutor' %}Create and assign problems for your students.
-       {% else %}Work on problems and track your progress.{% endif %}</p>
-  </a>
+  {% if current_user.role == 'student' %}
+    <a class="tile" href="{{ url_for('practice') }}">
+      <span class="tile-icon" aria-hidden="true">✏️</span>
+      <h2>Practice Problems</h2>
+      <p>Work on problems and track your progress.</p>
+    </a>
+  {% endif %}
   <a class="tile" href="{{ url_for('dashboard') }}">
     <span class="tile-icon" aria-hidden="true">📊</span>
     <h2>Dashboard</h2>
-    <p>{% if current_user.role == 'tutor' %}Your tutor code and your students.
-       {% else %}Your tutor and how you're doing.{% endif %}</p>
+    <p>{% if current_user.role == 'tutor' %}Your tutor code and every student's progress.
+       {% else %}Your streak, your week, and what to practice next.{% endif %}</p>
   </a>
+  {% if current_user.role == 'tutor' %}
+    <a class="tile" href="{{ url_for('leaderboard') }}">
+      <span class="tile-icon" aria-hidden="true">🏆</span>
+      <h2>Leaderboard</h2>
+      <p>See the top students across NeuLearning.</p>
+    </a>
+  {% endif %}
   <a class="tile" href="{{ url_for('profile') }}">
     <span class="tile-icon" aria-hidden="true">👤</span>
     <h2>Profile</h2>

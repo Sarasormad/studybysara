@@ -219,3 +219,34 @@ class QuestRoutes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LevelOnDashboardAndProfile(unittest.TestCase):
+    def setUp(self):
+        self.db = fresh_db()
+        self.addCleanup(self.db.close)
+        tutor_app.app.config["TESTING"] = True
+        self.client = tutor_app.app.test_client()
+        self.kid = make_user(self.db, "Kid", username="kid")
+        for i in range(12):                                              # 120 points -> Level 2
+            answer(self.db, self.kid, noon(-1) + timedelta(minutes=i), 30)
+        with self.client.session_transaction() as s:
+            s["user_id"] = self.kid
+
+    def test_dashboard_shows_the_level_card(self):
+        html = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn('class="sd-level"', html)
+        self.assertIn("<h2>Level 2</h2>", html)
+        self.assertIn("180 points to Level 3", html)
+
+    def test_profile_shows_the_level_card_and_row(self):
+        html = self.client.get("/profile").get_data(as_text=True)
+        self.assertIn('class="profile-level"', html)
+        self.assertIn("<h2>Level 2</h2>", html)
+        self.assertIn("Level 2 · 120 points earned", html)
+
+    def test_tutors_see_no_level(self):
+        with self.client.session_transaction() as s:
+            s["user_id"] = make_user(self.db, "Tutor", role="tutor")
+        for page in ("/dashboard", "/profile"):
+            self.assertNotIn("level-card", self.client.get(page).get_data(as_text=True))

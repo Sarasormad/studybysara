@@ -1,4 +1,4 @@
-"""Tutor App — login / signup for students and tutors (Flask + SQLite)."""
+"""NeuLearning: login / signup for students and tutors (Flask + SQLite)."""
 import json
 import os
 import re
@@ -452,14 +452,16 @@ def linked_people(user):
 def home():
     user = current_user()
     students, tutor = linked_people(user)
-    goal = wallet = quests = chest = level = None
+    goal = wallet = quests = chest = level = overview = None
+    if user["role"] == "tutor":
+        overview = pr.class_overview(get_db(), user["id"], pr.utcnow())
     if user["role"] == "student":
         db, now = get_db(), pr.utcnow()
         goal, wallet = shop.next_goal(db, user["id"], now), shop.balance(db, user["id"])
         quests = qs.todays_quests(db, user["id"], now)
         chest, level = qs.chest_state(db, user["id"], now, quests), qs.user_level(db, user["id"])
     return render_template("home.html", students=students, tutor=tutor, goal=goal, wallet=wallet,
-                           quests=quests, chest=chest, level=level, chest_points=CHEST_POINTS)
+                           quests=quests, chest=chest, level=level, chest_points=CHEST_POINTS, overview=overview)
 
 
 @app.route("/profile")
@@ -472,22 +474,26 @@ def profile():
 @app.route("/profile/edit", methods=["GET", "POST"])
 @login_required
 def profile_edit():
-    """Students set their username and profile picture here.
-    (Exercise: extend this to edit name, grade level and subjects too.)"""
+    """Students edit their username and picture; tutors edit their name, subjects and picture."""
     user = current_user()
-    if user["role"] != "student":
-        flash("Profile pictures and usernames are for student accounts.", "error")
-        return redirect(url_for("profile"))
-
-    form = {"username": user["username"] or ""}
+    is_tutor = user["role"] == "tutor"
+    form = ({"name": user["name"], "subject": user["subject"] or ""} if is_tutor
+            else {"username": user["username"] or ""})
     if request.method == "POST":
         db = get_db()
-        form["username"] = request.form.get("username", "").strip()
         errors = []
-
-        problem = username_error(form["username"], user_id=user["id"])
-        if problem:
-            errors.append(problem)
+        if is_tutor:
+            form = {"name": request.form.get("name", "").strip()[:80],
+                    "subject": request.form.get("subject", "").strip()[:200]}
+            if not form["name"]:
+                errors.append("Name is required.")
+            if not form["subject"]:
+                errors.append("List at least one subject.")
+        else:
+            form["username"] = request.form.get("username", "").strip()
+            problem = username_error(form["username"], user_id=user["id"])
+            if problem:
+                errors.append(problem)
 
         new_avatar = None
         upload = request.files.get("avatar")
@@ -509,8 +515,12 @@ def profile_edit():
                 delete_avatar(user["avatar"])
                 avatar = None
             try:
-                db.execute("UPDATE users SET username = ?, avatar = ? WHERE id = ?",
-                           (form["username"], avatar, user["id"]))
+                if is_tutor:
+                    db.execute("UPDATE users SET name = ?, subject = ?, avatar = ? WHERE id = ?",
+                               (form["name"], form["subject"], avatar, user["id"]))
+                else:
+                    db.execute("UPDATE users SET username = ?, avatar = ? WHERE id = ?",
+                               (form["username"], avatar, user["id"]))
                 db.commit()
             except sqlite3.IntegrityError:          # someone grabbed the username a moment ago
                 delete_avatar(new_avatar)
@@ -518,7 +528,7 @@ def profile_edit():
             else:
                 flash("Profile updated.", "success")
                 return redirect(url_for("profile"))
-    return render_template("profile_edit.html", form=form)
+    return render_template("profile_edit.html", form=form, is_tutor=is_tutor)
 
 
 @app.route("/avatars/<path:filename>")
@@ -770,6 +780,8 @@ def answer_problem(problem_id):
         tomorrow = streaks.streak_points(result["streak_day"] + 1)
         streak_message = (f"🔥 Streak secured! +{result['streak_bonus']} points. "
                           f"Come back tomorrow for +{tomorrow}.")
+        if result["shield_earned"]:
+            streak_message += " You earned a 🛡️ streak shield: it protects your streak if you miss a day."
     events = qs.what_changed(before, qs.snapshot(db, user["id"], pr.utcnow()))
     if not instant:                                    # classic form post (no JavaScript)
         if streak_message:
@@ -880,8 +892,8 @@ def dashboard():
     user, db, now = current_user(), get_db(), pr.utcnow()
     students, tutor = linked_people(user)
     if user["role"] == "tutor":
-        rows = [{"student": s, **pr.student_summary(db, s["id"], now)} for s in students]
-        return render_template("dashboard.html", user=user, rows=rows)
+        overview = pr.class_overview(db, user["id"], now)
+        return render_template("dashboard.html", user=user, rows=overview["rows"], overview=overview)
     topics = pr.topic_accuracy(db, user["id"])
     recommended = pr.recommendations(topics)
     rec_names = {t["topic"] for t in recommended}
@@ -907,11 +919,15 @@ def student_detail(student_id):
                          "WHERE id = ? AND role = 'student' AND tutor_id = ?", (student_id, user["id"])).fetchone()
     if student is None:
         abort(404)
+    topics = pr.topic_accuracy(db, student_id)
+    recommended = pr.recommendations(topics)
     return render_template(
         "student_detail.html", student=student,
         summary=pr.student_summary(db, student_id, now),
         status=pr.practice_status(db, student_id, now),
-        topics=pr.topic_accuracy(db, student_id),
+        level=qs.user_level(db, student_id),
+        recommended=recommended, rec_names={t["topic"] for t in recommended},
+        chart=sorted(topics, key=lambda t: (-t["correct"] / t["answered"], -t["answered"], t["topic"])),
         attempts=pr.recent_attempts(db, student_id, limit=25),
     )
 

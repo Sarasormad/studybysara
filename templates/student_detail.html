@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% from "_macros.html" import avatar %}
-{% from "_progress.html" import topic_panel, attempts_panel %}
-{% block title %}{{ student.name }} · TutorConnect{% endblock %}
+{% from "_progress.html" import attempts_panel, accuracy_chart, recs_readonly %}
+{% from "_quests.html" import level_card %}
+{% block title %}{{ student.name }} · NeuLearning{% endblock %}
 {% block content %}
 <a class="back-link" href="{{ url_for('dashboard') }}">← All students</a>
 
@@ -13,14 +14,21 @@
   </div>
 </div>
 
-<div class="stat-row">
+<div class="sd-level">{{ level_card(level) }}</div>
+
+<div class="detail-stats">
   <div class="stat"><span class="stat-value">{{ summary.last_active|ago }}</span><span class="stat-label">last active</span></div>
-  <div class="stat"><span class="stat-value">🔥 {{ summary.current_streak }}</span><span class="stat-label">day streak (best {{ status.best_streak }})</span></div>
+  <div class="stat"><span class="stat-value">🔥 {{ summary.current_streak }}</span><span class="stat-label">day streak · best {{ status.best_streak }}</span></div>
+  <div class="stat"><span class="stat-value">🛡️ {{ status.shields }}</span><span class="stat-label">streak shield{{ '' if status.shields == 1 else 's' }}</span></div>
   <div class="stat"><span class="stat-value">{{ summary.week_answered }}</span><span class="stat-label">answered this week</span></div>
-  <div class="stat"><span class="stat-value">{{ (summary.accuracy ~ '%') if summary.accuracy is not none else '—' }}</span><span class="stat-label">overall accuracy ({{ summary.answered }} answers)</span></div>
+  <div class="stat"><span class="stat-value">{{ (summary.accuracy ~ '%') if summary.accuracy is not none else '—' }}</span><span class="stat-label">overall accuracy · {{ summary.answered }} answers</span></div>
   <div class="stat"><span class="stat-value">{{ status.today_minutes }}/{{ status.goal_minutes }}</span><span class="stat-label">minutes today</span></div>
 </div>
 
-{{ topic_panel(topics) }}
+<div class="sd-row sd-bottom">
+  {{ recs_readonly(recommended) }}
+  {{ accuracy_chart(chart, rec_names, whose="their") }}
+</div>
+
 {{ attempts_panel(attempts, title="Recent answers (last 25)") }}
 {% endblock %}

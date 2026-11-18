@@ -12,14 +12,37 @@
   {%- endif -%}
 {%- endmacro %}
 
+{# A friendly stopping point once today's goal is done, and a break nudge after long sessions. #}
+{% macro done_for_today(status, compact=false) -%}
+  {% if status.take_a_break %}
+    <div class="stop-card stop-break" role="status">
+      <span class="stop-icon" aria-hidden="true">🌿</span>
+      <div><strong>You've practiced {{ status.minutes_total }} minutes today. Amazing focus!</strong>
+        <span>Your brain remembers more after a break. Stretch, grab some water, and come back later or tomorrow.</span></div>
+    </div>
+  {% elif status.secured %}
+    <div class="stop-card stop-done" role="status">
+      <span class="stop-icon" aria-hidden="true">🎉</span>
+      <div><strong>You're done for today!</strong>
+        <span>Your streak is safe{% if not compact %}. Come back tomorrow for +{{ status.next_day_bonus }} streak points.
+          You can keep practicing for more points, or call it a day{% endif %}.</span></div>
+      {% if not compact %}<a class="button-link stop-home" href="{{ url_for('home') }}">I'm done for today</a>{% endif %}
+    </div>
+  {% endif %}
+{%- endmacro %}
+
 {# Today's practice time and streak, e.g. "6 of 10 minutes today". `status` comes from practice_status(). #}
 {% macro today_progress(status, compact=false) -%}
   <div class="today{{ ' today-compact' if compact }}{{ ' today-done' if status.secured }}">
     <div class="today-row">
       <span class="streak-flame" title="Current streak">🔥 {{ status.current_streak }} day{{ '' if status.current_streak == 1 else 's' }}</span>
+      {% if status.shields %}<span class="shield-chip" title="Streak shields: each one covers a missed day">🛡️ {{ status.shields }}</span>{% endif %}
       {% if status.secured %}
         <span class="today-text"><strong>Streak secured!</strong> +{{ status.today_bonus }} points.
           Come back tomorrow for +{{ status.tomorrow_bonus }}.</span>
+      {% elif status.shield_protecting %}
+        <span class="today-text"><strong>🛡️ Your shield is protecting your streak.</strong>
+          {{ status.today_minutes }} of {{ status.goal_minutes }} minutes today{% if not compact %} · practice today to keep it{% endif %}</span>
       {% else %}
         <span class="today-text"><strong>{{ status.today_minutes }} of {{ status.goal_minutes }} minutes</strong> today
           {%- if not compact %} · finish to earn +{{ status.bonus_if_finished }} streak points{% endif %}</span>
@@ -30,4 +53,50 @@
       <span style="width: {{ status.percent }}%"></span>
     </div>
   </div>
+{%- endmacro %}
+
+{# NeuLearning logo: a brain whose two halves hold math (+ and ×). `light` = white tile for the purple header.
+   The same art lives in static/logo.svg (used as the browser tab icon). #}
+{% macro logo_mark(size=32, light=true) -%}
+  <svg class="logo-mark" viewBox="0 0 40 40" width="{{ size }}" height="{{ size }}" aria-hidden="true" focusable="false"
+       xmlns="http://www.w3.org/2000/svg">
+    {% if light %}
+      <rect width="40" height="40" rx="11" fill="#fff"/>
+      {% set brain, plus, times = '#5b3ff5', '#f59e0b', '#0d9488' %}
+    {% else %}
+      <defs><linearGradient id="nl-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d28d9"/><stop offset="1" stop-color="#db2777"/></linearGradient></defs>
+      <rect width="40" height="40" rx="11" fill="url(#nl-tile)"/>
+      {% set brain, plus, times = '#fff', '#fde047', '#5eead4' %}
+    {% endif %}
+    <g fill="none" stroke="{{ brain }}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 10.5c-2.4-2.6-7-2-8 1.6-3 .3-4.6 3.4-3.3 5.9-2.1 1.6-2 4.8.1 6.2-.6 3.1 2.2 5.6 5.2 4.8 1.3 2.4 4.4 2.6 6 .9"/>
+      <path d="M20 10.5c2.4-2.6 7-2 8 1.6 3 .3 4.6 3.4 3.3 5.9 2.1 1.6 2 4.8-.1 6.2.6 3.1-2.2 5.6-5.2 4.8-1.3 2.4-4.4 2.6-6 .9"/>
+      <path d="M20 10.5v19.4"/>
+    </g>
+    <g fill="none" stroke-width="2.4" stroke-linecap="round">
+      <path d="M11.8 19.6h4.8M14.2 17.2v4.8" stroke="{{ plus }}"/>
+      <path d="M23.6 17.4l4.4 4.4M28 17.4l-4.4 4.4" stroke="{{ times }}"/>
+    </g>
+  </svg>
+{%- endmacro %}
+
+{# Simple line icons (24px grid, drawn with the text color) for the bottom tab bar. #}
+{% macro ui_icon(name) -%}
+  <svg class="ui-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"
+       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+       xmlns="http://www.w3.org/2000/svg">
+    {%- if name == 'home' -%}
+      <path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9"/>
+    {%- elif name == 'practice' -%}
+      <path d="M4 20h4L19.2 8.8a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/>
+    {%- elif name == 'dashboard' -%}
+      <path d="M3 20h18"/><path d="M6 20v-7"/><path d="M12 20V5"/><path d="M18 20v-10"/>
+    {%- elif name == 'leaderboard' -%}
+      <path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4.5v1A3 3 0 0 0 7 10"/><path d="M17 6h2.5v1A3 3 0 0 1 17 10"/><path d="M12 14v4"/><path d="M8 21h8"/>
+    {%- elif name == 'shop' -%}
+      <path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9L5 8z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>
+    {%- elif name == 'profile' -%}
+      <circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>
+    {%- endif -%}
+  </svg>
 {%- endmacro %}

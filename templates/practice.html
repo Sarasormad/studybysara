@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% from "_macros.html" import today_progress %}
+{% from "_macros.html" import today_progress, done_for_today %}
 {% from "_quests.html" import quests_panel %}
-{% block title %}Practice Problems · TutorConnect{% endblock %}
+{% block title %}Practice Problems · NeuLearning{% endblock %}
 
 {% macro topic_buttons(topics) -%}
   <div class="topic-buttons">
@@ -19,6 +19,9 @@
 {% else %}
   <p class="sub">Practice {{ status.goal_minutes }} minutes a day to keep your streak going.</p>
 
+  <div class="practice-layout">
+  <div class="pl-side">
+  {{ done_for_today(status) }}
   {{ today_progress(status) }}
 
   {{ quests_panel(quests, chest, chest_points, opened=chest_opened) }}
@@ -43,6 +46,8 @@
     </section>
   {% endif %}
 
+  </div>
+  <div class="pl-main">
   <div class="practice-modes">
     <section class="mode-card mode-primary">
       <span class="tile-icon" aria-hidden="true">🧮</span>
@@ -111,6 +116,8 @@
       <p class="generating" role="status" hidden>⏳ Making your questions… this can take up to 30 seconds.</p>
     </form>
   </section>
+  </div>
+  </div>
 {% endif %}
 {% endblock %}
 

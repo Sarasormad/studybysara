@@ -1,0 +1,44 @@
+{% from "_macros.html" import avatar %}
+{# Tutor views: class summary + "needs attention". Import with:
+   {% from "_class.html" import class_summary, attention_list %} #}
+
+{% macro class_summary(o) -%}
+  <div class="class-summary">
+    <div class="cs-card"><span class="cs-num">{{ o.count }}</span><span class="cs-label">student{{ '' if o.count == 1 else 's' }}</span></div>
+    <div class="cs-card"><span class="cs-num">{{ o.active_week }}<small>/{{ o.count }}</small></span><span class="cs-label">active this week</span></div>
+    <div class="cs-card"><span class="cs-num">{{ (o.accuracy ~ '%') if o.accuracy is not none else '—' }}</span><span class="cs-label">class accuracy</span></div>
+    <div class="cs-card cs-weak">
+      <span class="cs-label">Class weak spots</span>
+      {% if o.weak_topics %}
+        <ul class="weak-chips">
+          {% for t in o.weak_topics %}<li title="{{ t.answered }} answers from {{ t.students }} student{{ '' if t.students == 1 else 's' }}">{{ t.topic }} <b>{{ t.accuracy }}%</b></li>{% endfor %}
+        </ul>
+      {% else %}<span class="hint">Not enough answers yet.</span>{% endif %}
+    </div>
+  </div>
+{%- endmacro %}
+
+{% macro attention_list(o) -%}
+  <section class="panel attention-panel">
+    <h2>👀 Needs attention</h2>
+    {% if o.attention %}
+      <ul class="attention-list">
+        {% for r in o.attention %}
+          <li>
+            <a class="attention-row" href="{{ url_for('student_detail', student_id=r.student.id) }}">
+              {{ avatar(r.student, 36) }}
+              <span class="attention-who"><strong>{{ r.student.name }}</strong>
+                <small>{{ '@' ~ r.student.username if r.student.username else (r.student.grade_level or '') }}</small></span>
+              <span class="attention-reasons">{% for reason in r.reasons %}<span class="reason">{{ reason }}</span>{% endfor %}</span>
+              <span class="attention-go" aria-hidden="true">→</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% elif o.count %}
+      <p class="empty">🎉 Everyone is on track. No one needs a nudge right now.</p>
+    {% else %}
+      <p class="empty">No students yet. Share your tutor code from the Dashboard so students can link to you.</p>
+    {% endif %}
+  </section>
+{%- endmacro %}

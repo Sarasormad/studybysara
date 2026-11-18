@@ -1,4 +1,4 @@
-/* StudyBySara "game feel": instant feedback, celebrations and sound.
+/* NeuLearning "game feel": instant feedback, celebrations and sound.
  *
  * Everything here is an enhancement. Without JavaScript the app works the same, just
  * with page reloads and no effects. Motion is skipped for people who ask their device
@@ -278,8 +278,34 @@
     if (soundEl) Sound.play(soundEl.dataset.sound);
   }
 
+  // ---------------------------------------------------------------- Sortable tables
+  // <table data-sortable>: each <th data-sort-key> holds a button; each <td> carries a data-value.
+  function setupSortableTables() {
+    document.querySelectorAll("table[data-sortable]").forEach((table) => {
+      const headers = [...table.querySelectorAll("th[data-sort-key]")];
+      headers.forEach((th, col) => {
+        th.querySelector("button")?.addEventListener("click", () => {
+          const ascending = th.getAttribute("aria-sort") !== "ascending";
+          headers.forEach((h) => h.setAttribute("aria-sort", "none"));
+          th.setAttribute("aria-sort", ascending ? "ascending" : "descending");
+          const body = table.tBodies[0];
+          const rows = [...body.rows];
+          const value = (row) => row.cells[col]?.dataset.value ?? "";
+          const numeric = rows.every((r) => value(r) !== "" && !isNaN(Number(value(r))));
+          rows.sort((a, b) => {
+            const x = value(a), y = value(b);
+            const cmp = numeric ? Number(x) - Number(y) : x.localeCompare(y);
+            return ascending ? cmp : -cmp;
+          });
+          rows.forEach((r) => body.appendChild(r));
+        });
+      });
+    });
+  }
+
+  setupSortableTables();
   setupSoundToggle();
   setupInstantAnswers();
   onLoad();
-  window.StudyBySaraGame = { confetti, floatText, countUp, toast, Sound };   // handy for experimenting in the console
+  window.NeuLearningGame = { confetti, floatText, countUp, toast, Sound };   // handy for experimenting in the console
 })();

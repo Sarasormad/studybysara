@@ -70,3 +70,62 @@
   {% endif %}
 </section>
 {%- endmacro %}
+
+
+{# Accuracy by topic as ranked horizontal bars; `rec_names` (the recommended topics) are highlighted.
+   Used on the student Dashboard and on the tutor's student page. #}
+{% macro accuracy_chart(chart, rec_names, whose="your") -%}
+  <section class="panel sd-card sd-chart">
+    <h2>📊 Accuracy by topic</h2>
+    {% if chart %}
+      <p class="hint">Every topic {{ 'you' if whose == 'your' else 'they' }}'ve answered, best first.{% if rec_names %} <span class="key-swatch"></span> = practice next.{% endif %}</p>
+      <div class="bar-chart" role="list" aria-label="Accuracy by topic">
+        {% for t in chart %}
+          {% set rec = t.topic in rec_names %}
+          <div class="bar-row{{ ' is-rec' if rec }}" role="listitem" tabindex="0"
+               aria-label="{{ t.topic }}: {{ t.accuracy }}% ({{ t.correct }} of {{ t.answered }} correct){{ ', practice next' if rec }}">
+            <span class="bar-label" title="{{ t.topic }}">{{ t.topic }}</span>
+            <span class="bar-track">
+              <span class="bar" style="width: {{ [t.accuracy, 1]|max }}%"></span>
+              {% if rec %}<span class="bar-value" style="left: calc({{ [t.accuracy, 1]|max }}% + 6px)">{{ t.accuracy }}%</span>{% endif %}
+            </span>
+            <span class="bar-tip" aria-hidden="true">{{ t.topic }}: {{ t.accuracy }}% · {{ t.correct }}/{{ t.answered }} correct</span>
+          </div>
+        {% endfor %}
+        <div class="bar-axis" aria-hidden="true"><span></span><span class="bar-ticks"><span>0%</span><span>50%</span><span>100%</span></span></div>
+      </div>
+      <details class="chart-table">
+        <summary>View as a table</summary>
+        <table class="data-table">
+          <thead><tr><th scope="col">Topic</th><th scope="col" class="num">Correct</th><th scope="col" class="num">Answered</th><th scope="col" class="num">Accuracy</th></tr></thead>
+          <tbody>
+            {% for t in chart %}<tr><td>{{ t.topic }}</td><td class="num">{{ t.correct }}</td><td class="num">{{ t.answered }}</td><td class="num">{{ t.accuracy }}%</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </details>
+    {% else %}
+      <p class="empty">{{ whose|capitalize }} chart appears after {{ whose }} first practice round.</p>
+    {% endif %}
+  </section>
+{%- endmacro %}
+
+{# The top topics to practice, as a read-only list (for tutors). #}
+{% macro recs_readonly(recommended) -%}
+<section class="panel sd-card sd-recs">
+  <h2>💡 Practice next</h2>
+  {% if recommended %}
+    <p class="hint">Their weakest topics right now (3+ answers, not perfect).</p>
+    <ol class="rec-list">
+      {% for t in recommended %}
+        <li><div class="rec-item rec-static">
+          <span class="rec-rank">{{ loop.index }}</span>
+          <span class="rec-body"><span class="rec-name">{{ t.topic }}</span>
+            <span class="rec-meta">{{ t.accuracy }}% · {{ t.correct }} of {{ t.answered }} right</span></span>
+        </div></li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p class="empty">No weak spots yet: every topic with 3+ answers is perfect, or there isn't enough practice yet.</p>
+  {% endif %}
+</section>
+{%- endmacro %}

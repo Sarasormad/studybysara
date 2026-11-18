@@ -1,12 +1,13 @@
-{% from "_macros.html" import avatar %}
+{% from "_macros.html" import avatar, logo_mark, ui_icon %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}TutorConnect{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#5b3ff5">
+  <title>{% block title %}NeuLearning{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⭐</text></svg>">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}">
 </head>
 <body class="{{ 'app-layout' if current_user else 'auth-layout' }}">
 
@@ -20,25 +21,36 @@
 
 {% if current_user %}
   {# ---------- Logged-in layout: header bar + page content ---------- #}
-  {% set nav = [
-    ('profile',   'Profile'),
-    ('dashboard', 'Dashboard'),
-    ('practice',  'Practice Problems'),
-    ('leaderboard', 'Leaderboard'),
-  ] %}
-  {% if current_user.role == 'student' %}{% set nav = nav + [('shop_page', 'Shop')] %}{% endif %}
+  {# Practice and Shop are for students; tutors follow their class from Home and Dashboard. #}
+  {% if current_user.role == 'student' %}
+    {% set nav = [('profile', 'Profile'), ('dashboard', 'Dashboard'), ('practice', 'Practice Problems'),
+                  ('leaderboard', 'Leaderboard'), ('shop_page', 'Shop')] %}
+  {% else %}
+    {% set nav = [('profile', 'Profile'), ('dashboard', 'Dashboard'), ('leaderboard', 'Leaderboard')] %}
+  {% endif %}
   {% set nav_groups = {'leaderboard': ['earn_points'], 'shop_page': ['buy_figurine', 'collection', 'figurine_page']} %}
+  {# Bottom tab bar (phones and iPad portrait): the main places, with icons. #}
+  {% if current_user.role == 'student' %}
+    {% set tabs = [('home', 'home', 'Home'), ('practice', 'practice', 'Practice'), ('dashboard', 'dashboard', 'Dashboard'),
+                   ('leaderboard', 'leaderboard', 'Leaderboard'), ('shop_page', 'shop', 'Shop')] %}
+  {% else %}
+    {% set tabs = [('home', 'home', 'Home'), ('dashboard', 'dashboard', 'Dashboard'), ('leaderboard', 'leaderboard', 'Leaderboard'),
+                   ('profile', 'profile', 'Profile')] %}
+  {% endif %}
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="{{ url_for('home') }}">📚 TutorConnect</a>
-      <nav aria-label="Main">
+      <a class="brand" href="{{ url_for('home') }}" aria-label="NeuLearning home">{{ logo_mark(32) }}<span class="brand-name">NeuLearning</span></a>
+      <nav class="nav-links" aria-label="Main">
         {% for endpoint, label in nav %}
           <a href="{{ url_for(endpoint) }}"
              {% if request.endpoint in [endpoint, endpoint ~ '_edit'] + nav_groups.get(endpoint, []) %}aria-current="page"{% endif %}
              {% if endpoint == 'profile' %}class="nav-profile"{% endif %}>
-            {%- if endpoint == 'profile' %}{{ avatar(current_user, 24) }}{% endif %}{{ label -}}
+            {%- if endpoint == 'profile' %}{{ avatar(current_user, 24) }}{% endif -%}
+            {%- if endpoint == 'practice' %}Practice<span class="nav-long"> Problems</span>{% else %}{{ label }}{% endif -%}
           </a>
         {% endfor %}
+      </nav>
+      <div class="nav-tools">
         {% if header_level %}
           <span class="level-chip" title="Level {{ header_level.level }} · {{ header_level.to_go }} points to Level {{ header_level.level + 1 }}">
             Lv {{ header_level.level }}<span class="level-chip-bar"><span style="width: {{ header_level.percent }}%"></span></span></span>
@@ -47,22 +59,33 @@
           <a class="wallet-pill" href="{{ url_for('shop_page') }}" title="Points to spend in the Shop">
             ⭐ <span data-wallet-value>{{ header_wallet }}</span></a>
         {% endif %}
-        <button type="button" class="sound-toggle" data-sound-toggle aria-pressed="false" hidden>🔇</button>
-        <form method="post" action="{{ url_for('logout') }}">
+        {% if current_user.role == 'student' %}
+          <button type="button" class="sound-toggle" data-sound-toggle aria-pressed="false" hidden>🔇</button>
+        {% endif %}
+        <a class="nav-avatar" href="{{ url_for('profile') }}" aria-label="Your profile"
+           {% if request.endpoint in ['profile', 'profile_edit'] %}aria-current="page"{% endif %}>{{ avatar(current_user, 32) }}</a>
+        <form method="post" action="{{ url_for('logout') }}" class="nav-logout-form">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <button type="submit" class="nav-logout">Log out</button>
         </form>
-      </nav>
+      </div>
     </div>
   </header>
   <main class="page">
     {{ flashes() }}
     {% block content %}{% endblock %}
   </main>
+  <nav class="tabbar" aria-label="App" style="--tabs: {{ tabs|length }}">
+    {% for endpoint, icon, label in tabs %}
+      <a href="{{ url_for(endpoint) }}"
+         {% if request.endpoint in [endpoint, endpoint ~ '_edit'] + nav_groups.get(endpoint, []) %}aria-current="page"{% endif %}>
+        <span class="tab-icon">{{ ui_icon(icon) }}</span><span class="tab-label">{{ label }}</span></a>
+    {% endfor %}
+  </nav>
 {% else %}
   {# ---------- Logged-out layout: centered card (login / signup) ---------- #}
   <main class="card">
-    <div class="brand">📚 TutorConnect</div>
+    <div class="brand">{{ logo_mark(34, light=false) }}<span>NeuLearning</span></div>
     {{ flashes() }}
     {{ self.content() }}
   </main>

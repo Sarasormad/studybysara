@@ -18,36 +18,55 @@ def practice_day(moment):
     return moment.astimezone(PRACTICE_TZ).date()
 
 
-def streak_ending(qualifying_days, day):
-    """How many consecutive qualifying days end on `day` (0 if `day` doesn't qualify)."""
+def streak_ending(qualifying_days, day, shielded=frozenset()):
+    """How many real qualifying days are in the run ending on `day` (0 if the run is broken).
+
+    Shielded days (missed days covered by a streak shield) keep the run going but don't
+    add to the count."""
     count = 0
-    while day in qualifying_days:
-        count += 1
+    while day in qualifying_days or day in shielded:
+        if day in qualifying_days:
+            count += 1
         day -= timedelta(days=1)
     return count
 
 
-def current_streak(qualifying_days, today):
+def current_streak(qualifying_days, today, shielded=frozenset()):
     """Today counts if it's already secured; otherwise the streak is still alive through yesterday."""
     if today in qualifying_days:
-        return streak_ending(qualifying_days, today)
-    return streak_ending(qualifying_days, today - timedelta(days=1))
+        return streak_ending(qualifying_days, today, shielded)
+    return streak_ending(qualifying_days, today - timedelta(days=1), shielded)
 
 
-def best_streak(qualifying_days):
+def best_streak(qualifying_days, shielded=frozenset()):
+    linked = set(qualifying_days) | set(shielded)
     best = 0
-    for day in qualifying_days:
-        if day - timedelta(days=1) not in qualifying_days:      # start of a run
-            best = max(best, streak_ending_forward(qualifying_days, day))
+    for day in linked:
+        if day - timedelta(days=1) not in linked:                # start of a run
+            best = max(best, streak_ending_forward(qualifying_days, day, shielded))
     return best
 
 
-def streak_ending_forward(qualifying_days, start):
+def streak_ending_forward(qualifying_days, start, shielded=frozenset()):
     count = 0
-    while start in qualifying_days:
-        count += 1
+    while start in qualifying_days or start in shielded:
+        if start in qualifying_days:
+            count += 1
         start += timedelta(days=1)
     return count
+
+
+def days_a_shield_would_cover(linked_days, today, shields_held):
+    """Missed days since the last practice day (before today) that held shields can cover.
+
+    Returns those days if there are between 1 and `shields_held` of them, else an empty set
+    (nothing missed, no practice history, or too many missed days to save the streak)."""
+    earlier = [d for d in linked_days if d < today]
+    if not earlier or shields_held <= 0:
+        return set()
+    last = max(earlier)
+    missed = {last + timedelta(days=n) for n in range(1, (today - last).days)}
+    return missed if 1 <= len(missed) <= shields_held else set()
 
 
 def streak_points(streak_day):

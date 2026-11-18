@@ -4,7 +4,11 @@
 {% from "_quests.html" import level_card %}
 {% block title %}{{ student.name }} · NeuLearning{% endblock %}
 {% block content %}
-<a class="back-link" href="{{ url_for('dashboard') }}">← All students</a>
+{% if request.args.get('back') == 'chat' %}
+  <a class="back-link" href="{{ url_for('messages_thread', other_id=student.id) }}">← Back to chat</a>
+{% else %}
+  <a class="back-link" href="{{ url_for('dashboard') }}">← All students</a>
+{% endif %}
 
 <div class="profile-head detail-head">
   {{ avatar(student, 64) }}
@@ -12,6 +16,7 @@
     <h1>{{ student.name }}</h1>
     <p class="sub">{{ '@' ~ student.username if student.username else 'No username' }} · {{ student.grade_level or 'Grade not set' }}</p>
   </div>
+  <a class="button-link primary detail-chat" href="{{ url_for('messages_thread', other_id=student.id) }}">💬 Message</a>
 </div>
 
 <div class="sd-level">{{ level_card(level) }}</div>

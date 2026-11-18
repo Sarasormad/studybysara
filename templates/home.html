@@ -32,6 +32,13 @@
   {% endif %}
 </section>
 
+{% if header_unread %}
+  <a class="callout chat-callout" href="{{ url_for('messages_home') }}">
+    <span>💬 {% if current_user.role == 'tutor' %}You have <b>{{ header_unread }}</b> unread message{{ '' if header_unread == 1 else 's' }} from students.
+      {%- else %}{{ tutor.name if tutor else 'Your tutor' }} sent you {{ 'a message' if header_unread == 1 else header_unread ~ ' messages' }}.{% endif %}</span>
+    <span class="button-link primary">Open chat</span></a>
+{% endif %}
+
 {% if current_user.role == 'tutor' and overview %}
   {{ class_summary(overview) }}
   {{ attention_list(overview) }}
@@ -80,6 +87,14 @@
       <span class="tile-icon" aria-hidden="true">🏆</span>
       <h2>Leaderboard</h2>
       <p>See the top students across NeuLearning.</p>
+    </a>
+  {% endif %}
+  {% if current_user.role == 'tutor' or tutor %}
+    <a class="tile" href="{{ url_for('messages_home') }}">
+      <span class="tile-icon" aria-hidden="true">💬</span>
+      <h2>Chat{% if header_unread %} <span class="tile-badge">{{ header_unread }} new</span>{% endif %}</h2>
+      <p>{% if current_user.role == 'tutor' %}Message your students and answer their questions.
+         {% else %}Message {{ tutor.name }}, or tap "Ask my tutor" on any question.{% endif %}</p>
     </a>
   {% endif %}
   <a class="tile" href="{{ url_for('profile') }}">

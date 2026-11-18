@@ -2,7 +2,7 @@
 {% from "_macros.html" import today_progress, done_for_today %}
 {% block title %}{{ pset.topic or 'Practice' }} · NeuLearning{% endblock %}
 
-{% from "_practice.html" import report_box with context %}
+{% from "_practice.html" import report_box, ask_box with context %}
 
 {% block content %}
 <div class="practice-top">
@@ -38,6 +38,7 @@
       {% endif %}
       <button type="submit">Check answer</button>
     </form>
+    {{ ask_box(problem, 'question') }}
     {{ report_box(problem, 'question') }}
   </section>
 

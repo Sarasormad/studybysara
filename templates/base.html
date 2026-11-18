@@ -59,6 +59,10 @@
           <a class="wallet-pill" href="{{ url_for('shop_page') }}" title="Points to spend in the Shop">
             ⭐ <span data-wallet-value>{{ header_wallet }}</span></a>
         {% endif %}
+        <a class="chat-link" href="{{ url_for('messages_home') }}"
+           aria-label="Messages{{ ', ' ~ header_unread ~ ' unread' if header_unread }}"
+           {% if request.endpoint in ['messages_home', 'messages_thread'] %}aria-current="page"{% endif %}>
+          {{ ui_icon('chat') }}<span class="badge-count" data-unread-badge {{ 'hidden' if not header_unread }}>{{ header_unread }}</span></a>
         {% if current_user.role == 'student' %}
           <button type="button" class="sound-toggle" data-sound-toggle aria-pressed="false" hidden>🔇</button>
         {% endif %}

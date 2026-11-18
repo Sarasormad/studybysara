@@ -46,3 +46,8 @@ ATTENTION_LOW_ACCURACY = 50           # accuracy below this (%)...
 ATTENTION_MIN_ANSWERS = 10            # ...once the student has at least this many answers
 ATTENTION_STREAK_DAYS = 3             # a streak at least this long that ended in the last week
 CLASS_TOPIC_MIN_ANSWERS = 5           # class-wide answers before a topic can be a class weak spot
+
+# ---------- Messages (student <-> tutor chat) ----------
+MESSAGE_MAX_LENGTH = 1000     # characters per message
+MESSAGES_PER_HOUR = 60        # per person, to stop accidental floods
+MESSAGE_POLL_SECONDS = 8      # how often an open chat checks for new messages

@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar %}
+{% from "_chat.html" import bubbles %}
+{% block title %}Messages · NeuLearning{% endblock %}
+{% block content %}
+<div class="chat-layout{{ ' has-active' if active else '' }}">
+  {# Left: the chat list (a tutor's students, or a student's tutor). #}
+  <aside class="chat-list" aria-label="Chats">
+    <h1 class="chat-list-title">Chat</h1>
+    {% if convos %}
+      <ul>
+        {% for c in convos %}
+          <li><a class="chat-item{{ ' is-unread' if c.unread }}" href="{{ url_for('messages_thread', other_id=c.other_id) }}"
+                 {% if active and active.other_id == c.other_id %}aria-current="page"{% endif %}>
+            {{ avatar(c.person, 40) }}
+            <span class="chat-item-body">
+              <span class="chat-item-top">
+                <span class="chat-item-name">{{ c.person.name }}</span>
+                {% if c.last_at %}<span class="chat-item-time">{{ c.last_at|ago }}</span>{% endif %}
+              </span>
+              <span class="chat-item-preview">
+                {%- if c.help_waiting %}<span class="reason">🙋 Needs help</span> {% endif -%}
+                {{ c.preview or 'No messages yet' }}</span>
+            </span>
+            {% if c.unread %}<span class="unread-dot" aria-label="{{ c.unread }} unread">{{ c.unread }}</span>{% endif %}
+          </a></li>
+        {% endfor %}
+      </ul>
+    {% elif current_user.role == 'tutor' %}
+      <p class="empty">No students yet. Share your tutor code from the Dashboard so students can link to you.</p>
+    {% else %}
+      <p class="empty">You're not linked to a tutor yet. Ask your tutor for their code.</p>
+    {% endif %}
+  </aside>
+
+  {# Right: the open conversation. #}
+  <section class="chat-pane" aria-label="Conversation">
+    {% if active %}
+      <header class="chat-head">
+        <a class="chat-back" href="{{ url_for('messages_home') }}" aria-label="All chats">←</a>
+        {{ avatar(active.person, 36) }}
+        <div>
+          <h2>{{ active.person.name }}</h2>
+          {% if current_user.role == 'tutor' %}
+            <a class="chat-head-link" href="{{ url_for('student_detail', student_id=active.other_id, back='chat') }}">View progress →</a>
+          {% else %}<span class="chat-head-sub">Your tutor</span>{% endif %}
+        </div>
+      </header>
+
+      <div class="chat-scroll" id="chat-scroll" aria-live="polite"
+           data-new-url="{{ url_for('messages_new', other_id=active.other_id) }}" data-poll="{{ poll_seconds }}">
+        {% if thread %}
+          {% set ns = namespace(day=None) %}
+          {% for m in thread %}
+            {% set day = m.created_at|local_time('%Y-%m-%d') %}
+            {% if day != ns.day %}<div class="chat-day"><span>{{ m.created_at|local_time('%A, %B %-d') }}</span></div>{% set ns.day = day %}{% endif %}
+            {{ bubbles([m]) }}
+          {% endfor %}
+        {% else %}
+          <p class="chat-empty">Say hi 👋{% if current_user.role == 'student' %} You can also tap
+            "Ask my tutor" on any practice question.{% endif %}</p>
+        {% endif %}
+        {% set last_mine = thread|selectattr('mine')|list|last %}
+        <p class="msg-seen" {% if not (last_mine and last_mine.read) %}hidden{% endif %}
+           data-for="{{ last_mine.id if last_mine else '' }}">Seen</p>
+      </div>
+
+      <form class="chat-compose" method="post" action="{{ url_for('messages_send', other_id=active.other_id) }}" id="chat-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <label class="visually-hidden" for="chat-body">Type a message</label>
+        <textarea id="chat-body" name="body" rows="1" maxlength="{{ max_length }}" required
+                  placeholder="Type a message" autocomplete="off"></textarea>
+        <button type="submit" class="chat-send" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 20 4l-4 16-4-7-8-1z"/><path d="m12 13 8-9"/></svg>
+        </button>
+      </form>
+      <p class="hint chat-note">Messages are kept so there's always a record. Be kind, and never share passwords or personal details.</p>
+    {% else %}
+      <div class="chat-placeholder">
+        <p>💬</p>
+        <p>{{ 'Pick a student to start chatting.' if current_user.role == 'tutor' else 'Your chats will show up here.' }}</p>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if active %}
+<script>
+  // Live chat: send without reloading, check for new messages every few seconds,
+  // add day dividers, and keep the newest message in view.
+  (() => {
+    const scroll = document.getElementById("chat-scroll");
+    const form = document.getElementById("chat-form");
+    const box = document.getElementById("chat-body");
+    const seen = scroll.querySelector(".msg-seen");
+    const lastId = () => Math.max(0, ...[...scroll.querySelectorAll(".msg")].map((m) => +m.dataset.id));
+    const toBottom = () => { scroll.scrollTop = scroll.scrollHeight; };
+    toBottom();
+
+    function addHtml(html) {
+      let added = 0;
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      tmp.querySelectorAll(".msg").forEach((m) => {
+        if (scroll.querySelector(`.msg[data-id="${m.dataset.id}"]`)) return;
+        const prev = [...scroll.querySelectorAll(".msg")].pop();
+        if (!prev || prev.dataset.day !== m.dataset.day) {
+          const d = document.createElement("div");
+          d.className = "chat-day";
+          d.innerHTML = "<span></span>";
+          d.firstChild.textContent = m.dataset.label;
+          scroll.insertBefore(d, seen);
+        }
+        scroll.insertBefore(m, seen);
+        scroll.querySelector(".chat-empty")?.remove();
+        added++;
+      });
+      return added;
+    }
+    function update(data, force) {
+      // Only jump to the newest message if something arrived and the reader was near the bottom.
+      const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80;
+      const added = data.html ? addHtml(data.html) : 0;
+      const mine = [...scroll.querySelectorAll(".msg-mine")].pop();
+      seen.hidden = !(mine && data.seen_id && +data.seen_id >= +mine.dataset.id);
+      document.querySelectorAll("[data-unread-badge]").forEach((b) => {
+        b.textContent = data.unread; b.hidden = !data.unread;
+      });
+      if (force || (added && nearBottom)) toBottom();
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!box.value.trim()) return;
+      const body = new FormData(form);
+      body.append("after", lastId());
+      box.value = ""; box.style.height = "";
+      try {
+        const r = await fetch(form.action, { method: "POST", body, headers: { "X-Requested-With": "fetch" } });
+        const data = await r.json();
+        if (!r.ok) { box.value = body.get("body"); window.NeuLearningGame?.toast(data.error || "Couldn't send."); return; }
+        update(data, true);
+      } catch { box.value = body.get("body"); form.submit(); }
+      box.focus();
+    });
+    // Enter sends, Shift+Enter makes a new line (like Teams).
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+    });
+    box.addEventListener("input", () => { box.style.height = ""; box.style.height = Math.min(box.scrollHeight, 160) + "px"; });
+
+    const every = (+scroll.dataset.poll || 8) * 1000;
+    setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const r = await fetch(`${scroll.dataset.newUrl}?after=${lastId()}`);
+        if (r.ok) update(await r.json());
+      } catch {}
+    }, every);
+  })();
+</script>
+{% endif %}
+{% endblock %}

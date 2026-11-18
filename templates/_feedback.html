@@ -1,7 +1,7 @@
 {# The answer feedback panel. Rendered inside the question page, and on its own for instant
    feedback (static/game.js swaps it in without reloading). The data-* attributes tell the
    script what to celebrate. #}
-{% from "_practice.html" import report_box with context %}
+{% from "_practice.html" import report_box, ask_box with context %}
 <section class="panel question-panel feedback {{ 'is-right' if problem.is_correct else 'is-wrong' }}"
          data-correct="{{ 1 if problem.is_correct else 0 }}" data-points="{{ problem.points_awarded }}"
          data-combo="{{ combo }}">
@@ -36,5 +36,6 @@
 
   <a class="button-link primary next-btn" href="{{ url_for('practice_set', set_id=set_id) }}" autofocus>
     {{ 'Next question →' if has_next else 'See results →' }}</a>
+  {{ ask_box(problem, 'feedback') }}
   {{ report_box(problem, 'feedback') }}
 </section>

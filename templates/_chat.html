@@ -1,0 +1,26 @@
+{# Chat pieces shared by the Messages page and the live updates (app.py renders `bubbles`
+   on its own for new messages). Text is auto-escaped and links are never clickable. #}
+
+{% macro help_card(p, mine) -%}
+  <div class="help-card">
+    <span class="help-card-label">🙋 {{ 'You asked for help with' if mine else 'Needs help with' }}</span>
+    <span class="help-card-q">{{ p.question_text }}</span>
+    <span class="help-card-meta">{{ p.topic }}
+      {%- if p.answered %} · answered <b>{{ p.submitted_answer }}</b> {{ '✓' if p.is_correct else '✗' }}
+      {%- else %} · not answered yet{% endif %}
+      {%- if p.correct_answer is not none %} · answer key: <b>{{ p.correct_answer }}</b>{% endif %}</span>
+  </div>
+{%- endmacro %}
+
+{% macro bubbles(items) -%}
+  {% for m in items %}
+    <div class="msg {{ 'msg-mine' if m.mine else 'msg-theirs' }}" data-id="{{ m.id }}"
+         data-day="{{ m.created_at|local_time('%Y-%m-%d') }}" data-label="{{ m.created_at|local_time('%A, %B %-d') }}">
+      <div class="msg-bubble">
+        {% if m.problem %}{{ help_card(m.problem, m.mine) }}{% endif %}
+        {% if m.body %}<p class="msg-text">{{ m.body }}</p>{% endif %}
+      </div>
+      <time class="msg-time" datetime="{{ m.created_at.isoformat() }}">{{ m.created_at|local_time('%-I:%M %p') }}</time>
+    </div>
+  {% endfor %}
+{%- endmacro %}

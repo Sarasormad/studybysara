@@ -1,5 +1,28 @@
 {# Pieces shared by the question page and the instant feedback panel.
-   Import with: {% from "_practice.html" import report_box with context %} #}
+   Import with: {% from "_practice.html" import report_box, ask_box with context %} #}
+
+{# "Ask my tutor": sends this question to the student's tutor as a chat message. #}
+{% macro ask_box(problem, back) -%}
+  {% if current_user.tutor_id %}
+    {% if problem.id in asked %}
+      <p class="hint asked">🙋 Sent to your tutor. Their reply will show up in
+        <a href="{{ url_for('messages_home') }}">Messages</a>.</p>
+    {% else %}
+      <details class="ask-box">
+        <summary>🙋 Confused? Ask my tutor</summary>
+        <form method="post" action="{{ url_for('ask_tutor', problem_id=problem.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="back" value="{{ back }}">
+          <label><span>What's confusing? <span class="optional">(optional)</span></span>
+            <textarea name="note" rows="2" maxlength="1000" placeholder="e.g. I don't get how to start this one"></textarea>
+          </label>
+          <p class="hint">Your tutor will see this question{{ ' and your answer' if back == 'feedback' }}.</p>
+          <button type="submit" class="small">Send to my tutor</button>
+        </form>
+      </details>
+    {% endif %}
+  {% endif %}
+{%- endmacro %}
 
 {# "Report a problem" for AI questions: their answer keys can be wrong. #}
 {% macro report_box(problem, back) -%}

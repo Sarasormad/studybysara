@@ -25,9 +25,11 @@ import figurines as figs
 import shop
 import practice as pr          # (the route function below is also called practice)
 import quests as qs
+import messages as msgs
 import streaks
 from fundamentals import (TIER_TOPICS, TOPIC_BLURBS, TOPIC_ICONS, TOPICS, make_round,
                           tier_for_grade, topic_key)
+from config import MESSAGE_MAX_LENGTH, MESSAGE_POLL_SECONDS
 from config import AI_DAILY_LIMIT, CHEST_POINTS, FUNDAMENTALS_POINTS, FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -142,6 +144,7 @@ def init_db():
         db.executescript(pr.SCHEMA)            # (re)create any indexes the upgrade rebuilt
         db.executescript(shop.SCHEMA)          # figurine purchases
         db.executescript(qs.SCHEMA)            # daily quests
+        db.executescript(msgs.SCHEMA)          # student <-> tutor chat
         # Give a code to any tutor who signed up before codes existed.
         for (tutor_id,) in db.execute(
             "SELECT id FROM users WHERE role = 'tutor' AND tutor_code IS NULL"
@@ -304,7 +307,8 @@ def inject_user():
     wallet = level = None
     if user and user["role"] == "student":
         wallet, level = shop.balance(get_db(), user["id"]), qs.user_level(get_db(), user["id"])
-    return {"current_user": user, "header_wallet": wallet, "header_level": level}
+    unread = msgs.unread_count(get_db(), user) if user else 0
+    return {"current_user": user, "header_wallet": wallet, "header_level": level, "header_unread": unread}
 
 
 def login_required(view):
@@ -656,6 +660,96 @@ def report_problem(problem_id):
     return redirect(url_for("practice_set", set_id=problem["set_id"]))
 
 
+# ---------- Messages: one-on-one chat between a student and their tutor ----------
+def chat_page(db, user, other_id=None):
+    convos = msgs.conversations(db, user)
+    pair = active = None
+    if other_id is not None:
+        pair = msgs.pair_for(db, user, other_id)
+        if pair is None or (user["role"] == "student" and other_id != user["tutor_id"]):
+            abort(404)
+        active = next(c for c in convos if c["other_id"] == other_id)
+        msgs.mark_read(db, pair, user, pr.utcnow())
+        active["unread"] = active["help_waiting"] = 0
+    return render_template("messages.html", convos=convos, active=active,
+                           thread=msgs.thread(db, pair, user) if pair else [],
+                           max_length=MESSAGE_MAX_LENGTH, poll_seconds=MESSAGE_POLL_SECONDS)
+
+
+@app.route("/messages")
+@login_required
+def messages_home():
+    user, db = current_user(), get_db()
+    if user["role"] == "student" and user["tutor_id"]:
+        return redirect(url_for("messages_thread", other_id=user["tutor_id"]))
+    return chat_page(db, user)
+
+
+@app.route("/messages/<int:other_id>")
+@login_required
+def messages_thread(other_id):
+    return chat_page(get_db(), current_user(), other_id)
+
+
+def render_bubbles(items):
+    return get_template_attribute("_chat.html", "bubbles")(items)
+
+
+@app.route("/messages/<int:other_id>/send", methods=["POST"])
+@login_required
+def messages_send(other_id):
+    user, db = current_user(), get_db()
+    pair = msgs.pair_for(db, user, other_id)
+    if pair is None or (user["role"] == "student" and other_id != user["tutor_id"]):
+        abort(404)
+    instant = request.headers.get("X-Requested-With") == "fetch"
+    try:
+        msgs.send(db, user, pair, request.form.get("body"), pr.utcnow())
+    except msgs.MessageError as e:
+        if instant:
+            return jsonify(error=str(e)), 400
+        flash(str(e), "error")
+    if instant:
+        return messages_new(other_id)
+    return redirect(url_for("messages_thread", other_id=other_id))
+
+
+@app.route("/messages/<int:other_id>/new")
+@login_required
+def messages_new(other_id):
+    """New messages after ?after=<id>, as rendered bubbles (the open chat polls this)."""
+    user, db = current_user(), get_db()
+    pair = msgs.pair_for(db, user, other_id)
+    if pair is None or (user["role"] == "student" and other_id != user["tutor_id"]):
+        abort(404)
+    after = request.values.get("after", 0, type=int)
+    msgs.mark_read(db, pair, user, pr.utcnow())
+    items = msgs.thread(db, pair, user, after_id=after)
+    seen = db.execute("SELECT MAX(id) FROM messages WHERE student_id = ? AND tutor_id = ? AND sender_id = ? "
+                      "AND read_at IS NOT NULL", (*pair, user["id"])).fetchone()[0]
+    return jsonify(html=str(render_bubbles(items)), last_id=items[-1]["id"] if items else after,
+                   seen_id=seen, unread=msgs.unread_count(db, user))
+
+
+@app.route("/practice/problem/<int:problem_id>/ask", methods=["POST"])
+@student_required
+def ask_tutor(problem_id):
+    user, db = current_user(), get_db()
+    problem = db.execute("SELECT set_id FROM problems WHERE id = ? AND created_for = ?",
+                         (problem_id, user["id"])).fetchone()
+    if problem is None:
+        abort(404)
+    try:
+        msgs.ask_for_help(db, user, problem_id, request.form.get("note"), pr.utcnow())
+    except msgs.MessageError as e:
+        flash(str(e), "error")
+    else:
+        flash("Sent to your tutor. You'll see their reply in Messages.", "success")
+    if request.form.get("back") == "feedback":
+        return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
+    return redirect(url_for("practice_set", set_id=problem["set_id"]))
+
+
 @app.route("/practice/fundamentals/start", methods=["POST"])
 @student_required
 def start_fundamentals():
@@ -718,6 +812,7 @@ def set_page_context(db, user, set_id):
     pset = db.execute("SELECT * FROM problem_sets WHERE id = ?", (set_id,)).fetchone()
     from_board = set_id in session.get("leaderboard_sets", [])
     page = {"pset": pset, "reported": pr.reported_ids(db, user["id"], [r["id"] for r in rows]),
+            "asked": msgs.asked_ids(db, user["id"], [r["id"] for r in rows]),
             "report_reasons": pr.REPORT_REASONS,
             "back_url": url_for("leaderboard") if from_board else url_for("practice"),
             "back_label": "Leaderboard" if from_board else "Practice"}

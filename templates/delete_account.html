@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Delete account · NeuLearning{% endblock %}
+{% block content %}
+<div class="narrow">
+<a class="back-link" href="{{ url_for('profile') }}">← Profile</a>
+<h1>Delete your account</h1>
+<section class="panel danger-panel">
+  <p><strong>This can't be undone.</strong> Deleting your account permanently removes:</p>
+  <ul>
+    <li>your profile, {{ 'username, ' if current_user.role == 'student' }}picture and email settings</li>
+    {% if current_user.role == 'student' %}
+      <li>all your practice answers, points, streaks, quests and figurines</li>
+      <li>your chat with your tutor</li>
+    {% else %}
+      <li>your chats with your students</li>
+      <li>your tutor code: {% if students %}your {{ students }} student{{ '' if students == 1 else 's' }} will be unlinked
+        and can join a new tutor{% else %}no students are linked to you{% endif %}</li>
+    {% endif %}
+  </ul>
+  <form method="post" action="{{ url_for('delete_account') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label>Type your password to confirm
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="danger">Delete my account forever</button>
+      <a class="button-link" href="{{ url_for('profile') }}">Cancel</a>
+    </div>
+  </form>
+</section>
+</div>
+{% endblock %}

@@ -41,5 +41,6 @@
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <button type="submit" class="secondary">Log out</button>
 </form>
+<p class="danger-link"><a href="{{ url_for('delete_account') }}">Delete my account</a></p>
 </div>
 {% endblock %}

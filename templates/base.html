@@ -8,6 +8,13 @@
   <title>{% block title %}NeuLearning{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}">
+  {# Installable app: manifest + home-screen icon + full-screen on iPhone. #}
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="NeuLearning">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
 </head>
 <body class="{{ 'app-layout' if current_user else 'auth-layout' }}">
 
@@ -76,6 +83,16 @@
     </div>
   </header>
   <main class="page">
+    {# Shown by the script below only on phones/tablets that haven't installed the app yet. #}
+    <div class="install-banner" id="install-banner" hidden>
+      <img src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="" width="40" height="40">
+      <div class="install-text">
+        <strong>Get the NeuLearning app</strong>
+        <span data-install-how>Add it to your home screen for one-tap practice.</span>
+      </div>
+      <button type="button" class="small" data-install-go hidden>Install</button>
+      <button type="button" class="install-close" data-install-close aria-label="Not now">✕</button>
+    </div>
     {{ flashes() }}
     {% block content %}{% endblock %}
   </main>
@@ -113,6 +130,48 @@
   });
 </script>
 <script src="{{ url_for('static', filename='game.js') }}" defer></script>
+<script>
+  // Register the service worker (installable app + offline page).
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  }
+
+  // "Install the app" banner: Android/Chrome gets an Install button; iPhone/iPad gets the two taps.
+  (() => {
+    const banner = document.getElementById("install-banner");
+    if (!banner) return;
+    const installed = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem("nl-install-dismissed") === "1"; } catch {}
+    if (installed || dismissed) return;
+    const how = banner.querySelector("[data-install-how]");
+    const go = banner.querySelector("[data-install-go]");
+    const close = () => {
+      banner.hidden = true;
+      try { localStorage.setItem("nl-install-dismissed", "1"); } catch {}
+    };
+    banner.querySelector("[data-install-close]").addEventListener("click", close);
+
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (ios) {
+      how.textContent = "Tap the Share button, then \u201cAdd to Home Screen\u201d.";
+      banner.hidden = false;
+      return;
+    }
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      go.hidden = false;
+      banner.hidden = false;
+      go.addEventListener("click", async () => {
+        e.prompt();
+        const choice = await e.userChoice;
+        if (choice.outcome === "accepted") banner.hidden = true; else close();
+      }, { once: true });
+    });
+    window.addEventListener("appinstalled", () => { banner.hidden = true; });
+  })();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

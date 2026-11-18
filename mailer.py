@@ -16,7 +16,7 @@ from email.utils import make_msgid
 
 log = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTBOX = os.path.join(BASE_DIR, "instance", "outbox")
+OUTBOX = os.path.join(os.environ.get("NEULEARNING_DATA_DIR") or os.path.join(BASE_DIR, "instance"), "outbox")
 # Reserved domains that can never receive mail (demo and test accounts use them).
 FAKE_TLDS = {"test", "example", "invalid", "localhost"}
 

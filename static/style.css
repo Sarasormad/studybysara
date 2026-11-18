@@ -1258,3 +1258,23 @@ button.chat-send { margin: 0; width: 42px; height: 42px; padding: 0; display: in
 .email-settings { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; }
 .email-settings legend { font-weight: 700; padding: 0 6px; }
 .email-settings .hint { margin: 0; }
+.offline-card { text-align: center; } .offline-card img { border-radius: 18px; margin: 0 auto 8px; display: block; }
+
+/* "Get the app" banner */
+.install-banner { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 22px rgba(91, 63, 245, 0.08); }
+.install-banner[hidden] { display: none; }
+.install-banner img { border-radius: 10px; flex: none; }
+.install-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 0.9rem; }
+.install-text span { color: var(--muted); font-size: 0.82rem; }
+.install-banner button.small { margin: 0; }
+button.install-close { all: unset; cursor: pointer; padding: 6px 8px; color: var(--muted); border-radius: 8px; }
+button.install-close:focus-visible { outline: 2px solid var(--accent); }
+
+/* Delete account */
+.danger-link { text-align: center; margin-top: 18px; font-size: 0.85rem; }
+.danger-link a { color: var(--muted); }
+.danger-panel { border-color: #fecaca; }
+.danger-panel ul { margin: 6px 0 14px; padding-left: 20px; }
+button.danger { background: #dc2626; box-shadow: none; }
+button.danger:hover { background: #b91c1c; }

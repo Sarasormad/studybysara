@@ -5,6 +5,7 @@ import re
 import secrets
 import sqlite3
 from contextlib import closing
+from datetime import timedelta
 from functools import wraps
 
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ import practice as pr          # (the route function below is also called practi
 import quests as qs
 import messages as msgs
 import notify
+import accounts
 import streaks
 from fundamentals import (TIER_TOPICS, TOPIC_BLURBS, TOPIC_ICONS, TOPICS, make_round,
                           tier_for_grade, topic_key)
@@ -34,10 +36,17 @@ from config import MESSAGE_MAX_LENGTH, MESSAGE_POLL_SECONDS
 from config import AI_DAILY_LIMIT, CHEST_POINTS, FUNDAMENTALS_POINTS, FUNDAMENTALS_ROUND_SIZE, PRACTICE_TZ, WEAK_TOPIC_MIN_ATTEMPTS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Production: set NEULEARNING_ENV=production on the host (HTTPS-only cookies, proxy headers).
+PRODUCTION = os.environ.get("NEULEARNING_ENV") == "production"
+# Where data that must survive deploys lives (uploads, secret key, outbox). On a host, point
+# NEULEARNING_DATA_DIR at its persistent disk; locally it's instance/ (git-ignored).
+DATA_DIR = os.environ.get("NEULEARNING_DATA_DIR") or os.path.join(BASE_DIR, "instance")
 # STUDYBYSARA_DB lets tests and scripts point the app at a different database file.
-DATABASE = os.environ.get("STUDYBYSARA_DB") or os.path.join(BASE_DIR, "tutor_app.db")
-# Uploaded files live in instance/ (git-ignored), never in static/ or the repo.
-AVATAR_DIR = os.path.join(BASE_DIR, "instance", "avatars")
+DATABASE = os.environ.get("STUDYBYSARA_DB") or (
+    os.path.join(DATA_DIR, "tutor_app.db") if os.environ.get("NEULEARNING_DATA_DIR")
+    else os.path.join(BASE_DIR, "tutor_app.db"))
+# Uploaded files live in the data folder, never in static/ or the repo.
+AVATAR_DIR = os.path.join(DATA_DIR, "avatars")
 AVATAR_SIZE = 256                      # saved as a 256x256 square
 MAX_UPLOAD_MB = 5
 Image.MAX_IMAGE_PIXELS = 40_000_000    # refuse "decompression bomb" images
@@ -60,7 +69,7 @@ def load_secret_key():
     instance/secret_key (created once, git-ignored)."""
     if os.environ.get("SECRET_KEY"):
         return os.environ["SECRET_KEY"]
-    path = os.path.join(BASE_DIR, "instance", "secret_key")
+    path = os.path.join(DATA_DIR, "secret_key")
     try:
         with open(path, encoding="ascii") as f:
             key = f.read().strip()
@@ -77,12 +86,34 @@ def load_secret_key():
 
 app.config["SECRET_KEY"] = load_secret_key()
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024  # Flask rejects bigger requests
+# Stay logged in for 30 days (like an app), cookies hidden from scripts and other sites.
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+if PRODUCTION:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    # Hosts put the app behind a proxy that handles HTTPS; trust its headers (one hop).
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.config["SESSION_COOKIE_SECURE"] = True          # only send the login cookie over HTTPS
+    app.config["PREFERRED_URL_SCHEME"] = "https"
+
+
+@app.after_request
+def security_headers(resp):
+    """Basic protections for every page."""
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("X-Frame-Options", "DENY")                # no embedding in other sites
+    resp.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+    if PRODUCTION:
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return resp
 
 
 # ---------- Database ----------
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE)
+        g.db = sqlite3.connect(DATABASE, timeout=10)       # wait (not fail) if another request is writing
         g.db.row_factory = sqlite3.Row
     return g.db
 
@@ -109,7 +140,9 @@ def normalize_code(raw):
 
 def init_db():
     # closing() makes sure the connection is closed; `with sqlite3.connect()` alone only commits.
+    os.makedirs(os.path.dirname(os.path.abspath(DATABASE)), exist_ok=True)
     with closing(sqlite3.connect(DATABASE)) as db, db:
+        db.execute("PRAGMA journal_mode=WAL")       # lets readers and a writer work at the same time
         db.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -409,6 +442,7 @@ def signup():
                 errors.append("An account with that email (or username) already exists.")
             else:
                 session.clear()
+                session.permanent = True
                 session["user_id"] = cur.lastrowid
                 msg = f"Welcome, {form['name']}! Your {form['role']} account is ready."
                 if is_tutor:
@@ -434,6 +468,7 @@ def login():
             flash("Incorrect email or password.", "error")
         else:
             session.clear()
+            session.permanent = True
             session["user_id"] = user["id"]
             return redirect(url_for("home"))
     return render_template("login.html", email=email)
@@ -758,6 +793,33 @@ def ask_tutor(problem_id):
     if request.form.get("back") == "feedback":
         return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
     return redirect(url_for("practice_set", set_id=problem["set_id"]))
+
+
+# ---------- Installable app (PWA) ----------
+@app.route("/manifest.webmanifest")
+def manifest():
+    return send_from_directory(app.static_folder, "manifest.webmanifest",
+                               mimetype="application/manifest+json", max_age=3600)
+
+
+@app.route("/sw.js")
+def service_worker():
+    # Served from the site root so it can handle every page; never cached long, so updates arrive.
+    resp = send_from_directory(app.static_folder, "sw.js", mimetype="text/javascript", max_age=0)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/offline")
+def offline():
+    return render_template("offline.html")
+
+
+@app.route("/healthz")
+def healthz():
+    """For the host's uptime checks: is the app up and can it read the database?"""
+    get_db().execute("SELECT 1").fetchone()
+    return {"ok": True}
 
 
 # ---------- Email notifications ----------
@@ -1103,6 +1165,23 @@ def link_tutor():
         db.commit()
         flash(f"You're now linked to {tutor['name']}.", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/profile/delete", methods=["GET", "POST"])
+@login_required
+def delete_account():
+    """Delete my account and all my data, after typing my password to confirm."""
+    user, db = current_user(), get_db()
+    if request.method == "POST":
+        if not check_password_hash(user["password_hash"], request.form.get("password", "")):
+            flash("That password isn't right, so nothing was deleted.", "error")
+            return redirect(url_for("delete_account"))
+        delete_avatar(accounts.delete_account(db, user["id"]))
+        session.clear()
+        flash("Your account and all its data have been deleted.", "success")
+        return redirect(url_for("login"))
+    students = db.execute("SELECT COUNT(*) FROM users WHERE tutor_id = ?", (user["id"],)).fetchone()[0]
+    return render_template("delete_account.html", students=students)
 
 
 @app.route("/logout", methods=["POST"])

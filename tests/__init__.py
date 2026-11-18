@@ -10,6 +10,13 @@ os.environ["STUDYBYSARA_DB"] = os.path.join(tempfile.mkdtemp(), "test.db")
 # A fake key, set before app.py loads .env, so tests can never use (or bill) a real key.
 os.environ["ANTHROPIC_API_KEY"] = "sk-test-not-a-real-key"
 os.environ["SECRET_KEY"] = "test-secret-key"      # so tests never create instance/secret_key
+# Blank SMTP settings (set before .env loads, which never overrides them): tests never send real email.
+os.environ["SMTP_HOST"] = ""
+os.environ["APP_BASE_URL"] = "http://testserver"
+
+import mailer
+
+mailer.OUTBOX = os.path.join(tempfile.mkdtemp(), "outbox")   # emails from tests land here, not instance/
 
 import logging
 

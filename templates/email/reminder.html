@@ -1,0 +1,16 @@
+{% extends "email/_layout.html" %}
+{% block body %}
+<p style="margin-top:0">Hi {{ user.name.split()[0] }} 👋</p>
+{% if r.kind == 'almost' %}
+  <p>You've done <b>{{ s.today_minutes }} of {{ s.goal_minutes }} minutes</b> today. Just {{ s.goal_minutes - s.today_minutes }} more to finish!</p>
+{% elif r.kind == 'streak' %}
+  <p>You're on a <b>🔥 {{ s.current_streak }}-day streak</b>. {{ s.goal_minutes }} minutes of practice today keeps it going{% if s.next_day_bonus %}, and tomorrow is worth <b>+{{ s.next_day_bonus }} points</b>{% endif %}.</p>
+  {% if s.shields %}<p style="color:#6b7280">Good news: you have a 🛡️ streak shield, so missing one day won't break it.</p>{% endif %}
+{% elif r.kind == 'comeback' %}
+  <p>It's been a few days. No pressure: a quick 10-minute round is a great way to get back into it.</p>
+{% else %}
+  <p>Today's {{ s.goal_minutes }} minutes of math are waiting. A short round is all it takes.</p>
+{% endif %}
+{% with href=practice_url, label="Start practicing" %}{% include "email/_button.html" %}{% endwith %}
+<p style="color:#6b7280;font-size:14px">Already done for the day, or busy? That's fine. We'll only send one of these a day.</p>
+{% endblock %}

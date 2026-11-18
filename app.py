@@ -26,6 +26,7 @@ import shop
 import practice as pr          # (the route function below is also called practice)
 import quests as qs
 import messages as msgs
+import notify
 import streaks
 from fundamentals import (TIER_TOPICS, TOPIC_BLURBS, TOPIC_ICONS, TOPICS, make_round,
                           tier_for_grade, topic_key)
@@ -130,6 +131,10 @@ def init_db():
             "tutor_id": "INTEGER REFERENCES users(id)",         # student -> their tutor
             "username": "TEXT",                                 # students: public name for leaderboards
             "avatar": "TEXT",                                   # filename in instance/avatars/
+            # Email settings (1 = on). See notify.py.
+            "notify_reminders": "INTEGER NOT NULL DEFAULT 1",   # students: daily practice reminders
+            "notify_help": "INTEGER NOT NULL DEFAULT 1",        # tutors: "Ask my tutor" requests
+            "notify_alerts": "INTEGER NOT NULL DEFAULT 1",      # tutors: low-accuracy alerts
         }
         for column, ddl in new_columns.items():
             if column not in existing:
@@ -145,6 +150,7 @@ def init_db():
         db.executescript(shop.SCHEMA)          # figurine purchases
         db.executescript(qs.SCHEMA)            # daily quests
         db.executescript(msgs.SCHEMA)          # student <-> tutor chat
+        db.executescript(notify.SCHEMA)        # email log
         # Give a code to any tutor who signed up before codes existed.
         for (tutor_id,) in db.execute(
             "SELECT id FROM users WHERE role = 'tutor' AND tutor_code IS NULL"
@@ -518,13 +524,15 @@ def profile_edit():
             elif request.form.get("remove_avatar"):
                 delete_avatar(user["avatar"])
                 avatar = None
+            on = lambda field: 1 if request.form.get(field) else 0     # unchecked boxes aren't sent
             try:
                 if is_tutor:
-                    db.execute("UPDATE users SET name = ?, subject = ?, avatar = ? WHERE id = ?",
-                               (form["name"], form["subject"], avatar, user["id"]))
+                    db.execute("UPDATE users SET name = ?, subject = ?, avatar = ?, notify_help = ?, notify_alerts = ? "
+                               "WHERE id = ?", (form["name"], form["subject"], avatar,
+                                                on("notify_help"), on("notify_alerts"), user["id"]))
                 else:
-                    db.execute("UPDATE users SET username = ?, avatar = ? WHERE id = ?",
-                               (form["username"], avatar, user["id"]))
+                    db.execute("UPDATE users SET username = ?, avatar = ?, notify_reminders = ? WHERE id = ?",
+                               (form["username"], avatar, on("notify_reminders"), user["id"]))
                 db.commit()
             except sqlite3.IntegrityError:          # someone grabbed the username a moment ago
                 delete_avatar(new_avatar)
@@ -532,7 +540,8 @@ def profile_edit():
             else:
                 flash("Profile updated.", "success")
                 return redirect(url_for("profile"))
-    return render_template("profile_edit.html", form=form, is_tutor=is_tutor)
+    from config import ATTENTION_LOW_ACCURACY
+    return render_template("profile_edit.html", form=form, is_tutor=is_tutor, low_accuracy=ATTENTION_LOW_ACCURACY)
 
 
 @app.route("/avatars/<path:filename>")
@@ -740,14 +749,65 @@ def ask_tutor(problem_id):
     if problem is None:
         abort(404)
     try:
-        msgs.ask_for_help(db, user, problem_id, request.form.get("note"), pr.utcnow())
+        message_id = msgs.ask_for_help(db, user, problem_id, request.form.get("note"), pr.utcnow())
     except msgs.MessageError as e:
         flash(str(e), "error")
     else:
+        notify.help_requested(db, user, message_id, pr.utcnow())     # emails the tutor
         flash("Sent to your tutor. You'll see their reply in Messages.", "success")
     if request.form.get("back") == "feedback":
         return redirect(url_for("practice_set", set_id=problem["set_id"], answered=problem_id))
     return redirect(url_for("practice_set", set_id=problem["set_id"]))
+
+
+# ---------- Email notifications ----------
+@app.route("/notifications/unsubscribe/<token>", methods=["GET", "POST"])
+def unsubscribe(token):
+    """One-click "turn these emails off" from an email. Works without logging in; the signed
+    token says which person and which kind of email."""
+    found = notify.read_token(token)
+    if found is None:
+        abort(404)
+    user_id, kind = found
+    db = get_db()
+    person = db.execute("SELECT id, name FROM users WHERE id = ?", (user_id,)).fetchone()
+    if person is None:
+        abort(404)
+    done = request.method == "POST"
+    if done:
+        db.execute(f"UPDATE users SET {notify.SETTING[kind]} = 0 WHERE id = ?", (user_id,))
+        db.commit()
+    return render_template("unsubscribe.html", person=person, what=notify.LABEL[kind], done=done)
+
+
+def run_notifications(now=None):
+    """Send whatever reminders and alerts are due. Used by `flask notify` and the dev loop."""
+    base = os.environ.get("APP_BASE_URL", "http://localhost:5001")
+    with app.test_request_context(base_url=base):
+        return notify.run_due(get_db(), now or pr.utcnow())
+
+
+@app.cli.command("notify")
+def notify_command():
+    """Send due emails. Run it every 15 minutes or so, e.g. with cron:
+    */15 * * * *  cd /path/to/tutor_app && .venv/bin/flask --app app notify"""
+    print(run_notifications())
+
+
+def start_notification_loop():
+    """While the dev server runs, check for due emails every few minutes."""
+    import threading
+    import time
+    from config import NOTIFY_EVERY_MINUTES
+
+    def loop():
+        while True:
+            try:
+                run_notifications()
+            except Exception:                      # never let one bad run stop the loop
+                app.logger.exception("Notification run failed")
+            time.sleep(NOTIFY_EVERY_MINUTES * 60)
+    threading.Thread(target=loop, daemon=True, name="notifications").start()
 
 
 @app.route("/practice/fundamentals/start", methods=["POST"])
@@ -1059,4 +1119,7 @@ if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TO
                        "'AI practice isn't set up yet'. Add it to .env (see .env.example).")
 
 if __name__ == "__main__":
+    # The debug reloader runs this file twice; only the real server process sends email.
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" and os.environ.get("NOTIFY_IN_APP", "1") == "1":
+        start_notification_loop()
     app.run(debug=True, port=5001)  # 5000 is used by AirPlay on macOS

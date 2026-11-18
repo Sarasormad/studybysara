@@ -1253,3 +1253,8 @@ button.chat-send { margin: 0; width: 42px; height: 42px; padding: 0; display: in
 .chat-callout { text-decoration: none; color: inherit; margin-bottom: 16px; }
 .detail-head .detail-chat { margin-left: auto; align-self: center; }
 .tile-badge { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 0.72rem; font-weight: 800; }
+
+/* Email settings on Edit profile */
+.email-settings { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.email-settings legend { font-weight: 700; padding: 0 6px; }
+.email-settings .hint { margin: 0; }

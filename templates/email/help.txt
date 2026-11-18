@@ -1,0 +1,11 @@
+Hi {{ user.name.split()[0] }},
+
+{{ student.name }} is stuck and asked for your help on this question:
+
+  {{ problem.topic }}: {{ problem.question_text }}
+{% if problem.body %}  "{{ problem.body }}"
+{% endif %}
+Reply in NeuLearning: {{ chat_url }}
+
+--
+Turn off emails about {{ what }}: {{ unsubscribe_url }}

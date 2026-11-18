@@ -1,0 +1,14 @@
+{% extends "email/_layout.html" %}
+{% block body %}
+<p style="margin-top:0">Hi {{ user.name.split()[0] }},</p>
+<p>{{ 'This student is' if flagged|length == 1 else 'These students are' }} getting fewer than {{ threshold }}% of answers right overall:</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+  {% for f in flagged %}
+    <tr><td style="padding:10px 0;border-bottom:1px solid #eee">
+      <a href="{{ links[f.student.id] }}" style="color:#5b3ff5;font-weight:700;text-decoration:none">{{ f.student.name }}</a><br>
+      <span style="font-size:14px;color:#6b7280">{{ f.accuracy }}% overall · {{ f.correct }} of {{ f.answered }} right{% if f.weakest_topic %} · weakest: {{ f.weakest_topic }}{% endif %}</span>
+    </td></tr>
+  {% endfor %}
+</table>
+<p style="color:#6b7280;font-size:14px">A quick message or a session on their weakest topic can help. We won't email you about the same student again for a week.</p>
+{% endblock %}

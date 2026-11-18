@@ -46,6 +46,20 @@
       <p class="hint">3–20 letters, numbers or underscores. Pick something that isn't your real name.</p>
     {% endif %}
 
+    <fieldset class="email-settings">
+      <legend>Email me</legend>
+      {% if is_tutor %}
+        <label class="checkbox"><input type="checkbox" name="notify_help" value="1" {{ 'checked' if current_user.notify_help }}>
+          When a student taps "Ask my tutor"</label>
+        <label class="checkbox"><input type="checkbox" name="notify_alerts" value="1" {{ 'checked' if current_user.notify_alerts }}>
+          When a student's overall accuracy drops below {{ low_accuracy }}% (at most weekly per student)</label>
+      {% else %}
+        <label class="checkbox"><input type="checkbox" name="notify_reminders" value="1" {{ 'checked' if current_user.notify_reminders }}>
+          A friendly reminder in the afternoon if I haven't done today's practice (at most once a day)</label>
+      {% endif %}
+      <p class="hint">Emails go to {{ current_user.email }}.</p>
+    </fieldset>
+
     <div class="form-actions">
       <button type="submit">Save changes</button>
       <a class="button-link" href="{{ url_for('profile') }}">Cancel</a>

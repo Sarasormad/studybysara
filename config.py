@@ -51,3 +51,11 @@ CLASS_TOPIC_MIN_ANSWERS = 5           # class-wide answers before a topic can be
 MESSAGE_MAX_LENGTH = 1000     # characters per message
 MESSAGES_PER_HOUR = 60        # per person, to stop accidental floods
 MESSAGE_POLL_SECONDS = 8      # how often an open chat checks for new messages
+
+# ---------- Email notifications ----------
+REMINDER_HOUR = 16              # daily practice reminders go out from 4 PM...
+REMINDER_LATEST_HOUR = 20       # ...until 8 PM (PRACTICE_TZ); never at night
+REMINDER_DAILY_IDLE_DAYS = 2    # remind every day while someone has been away this many days or fewer
+REMINDER_LATER_DAYS = (4, 7, 10)  # after that, only on these days away; then stop completely
+LOW_ACCURACY_REPEAT_DAYS = 7    # re-alert a tutor about the same student at most once a week
+NOTIFY_EVERY_MINUTES = 15       # how often the dev server's background loop checks

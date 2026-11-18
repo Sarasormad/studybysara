@@ -1,0 +1,11 @@
+Hi {{ user.name.split()[0] }},
+
+{{ 'This student is' if flagged|length == 1 else 'These students are' }} getting fewer than {{ threshold }}% of answers right overall:
+
+{% for f in flagged %}- {{ f.student.name }}: {{ f.accuracy }}% ({{ f.correct }} of {{ f.answered }} right){% if f.weakest_topic %}, weakest: {{ f.weakest_topic }}{% endif %}
+  {{ links[f.student.id] }}
+{% endfor %}
+We won't email you about the same student again for a week.
+
+--
+Turn off {{ what }}: {{ unsubscribe_url }}

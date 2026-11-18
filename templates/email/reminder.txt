@@ -1,0 +1,14 @@
+Hi {{ user.name.split()[0] }},
+
+{% if r.kind == 'almost' %}You've done {{ s.today_minutes }} of {{ s.goal_minutes }} minutes today. Just {{ s.goal_minutes - s.today_minutes }} more to finish!
+{% elif r.kind == 'streak' %}You're on a {{ s.current_streak }}-day streak. {{ s.goal_minutes }} minutes of practice today keeps it going.
+{% if s.shields %}You have a streak shield, so missing one day won't break it.
+{% endif %}{% elif r.kind == 'comeback' %}It's been a few days. No pressure: a quick 10-minute round is a great way to get back into it.
+{% else %}Today's {{ s.goal_minutes }} minutes of math are waiting. A short round is all it takes.
+{% endif %}
+Start practicing: {{ practice_url }}
+
+We'll only send one of these a day.
+
+--
+Turn off {{ what }}: {{ unsubscribe_url }}

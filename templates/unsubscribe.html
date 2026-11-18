@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Email settings · NeuLearning{% endblock %}
+{% block content %}
+<div class="narrow">
+<section class="panel">
+  {% if done %}
+    <h1>You're unsubscribed</h1>
+    <p>We won't send {{ what }} to {{ person.name }} anymore. You can turn them back on any time from
+      <b>Profile → Edit profile</b>.</p>
+  {% else %}
+    <h1>Turn off {{ what }}?</h1>
+    <p>This stops {{ what }} for {{ person.name }}. Nothing else changes.</p>
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit">Turn them off</button>
+    </form>
+  {% endif %}
+</section>
+</div>
+{% endblock %}
